@@ -1,0 +1,200 @@
+{
+  "info": {
+    "name": "ZKTeco Attendance Bridge API",
+    "description": "Postman collection for common endpoints: devices, raw/processed attendance, sync and delete actions.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "version": "1.0.0"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8000",
+      "type": "string"
+    },
+    {
+      "key": "apiToken",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Devices",
+      "item": [
+        {
+          "name": "List Devices",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Token {{apiToken}}", "type": "text" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/devices/", "host": ["{{baseUrl}}"], "path": ["api","devices",""] }
+          }
+        },
+        {
+          "name": "Get Device Info (custom action)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Token {{apiToken}}", "type": "text" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/devices/:id/info/", "host": ["{{baseUrl}}"], "path": ["api","devices",":id","info"], "variable":[{"key":"id","value":"1"}] }
+          }
+        },
+        {
+          "name": "Poll Device (manual)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Token {{apiToken}}", "type": "text" },
+              { "key": "Content-Type", "value": "application/json", "type": "text" }
+            ],
+            "body": { "mode": "raw", "raw": "" },
+            "url": { "raw": "{{baseUrl}}/api/devices/:id/poll/", "host": ["{{baseUrl}}"], "path": ["api","devices",":id","poll"], "variable":[{"key":"id","value":"1"}] }
+          }
+        },
+        {
+          "name": "Poll All Devices",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Token {{apiToken}}", "type": "text" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/devices/poll_all/", "host": ["{{baseUrl}}"], "path": ["api","devices","poll_all"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Raw Attendance",
+      "item": [
+        {
+          "name": "List Raw Attendance",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Token {{apiToken}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/raw-attendance/?start_date=2025-11-12&end_date=2025-11-13",
+              "host": ["{{baseUrl}}"],
+              "path": ["api","raw-attendance",""],
+              "query": [
+                { "key": "start_date", "value": "" },
+                { "key": "end_date", "value": "" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Processed Attendance",
+      "item": [
+        {
+          "name": "List Processed Attendance",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Token {{apiToken}}", "type": "text" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/processed-attendance/", "host": ["{{baseUrl}}"], "path": ["api","processed-attendance",""] }
+          }
+        },
+        {
+          "name": "Get Unsynced (custom)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Token {{apiToken}}", "type": "text" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/processed-attendance/unsynced/?limit=100", "host": ["{{baseUrl}}"], "path": ["api","processed-attendance","unsynced"], "query":[{"key":"limit","value":"100"}] }
+          }
+        },
+        {
+          "name": "Get Outliers (custom)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Token {{apiToken}}", "type": "text" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/processed-attendance/outliers/", "host": ["{{baseUrl}}"], "path": ["api","processed-attendance","outliers"] }
+          }
+        },
+        {
+          "name": "Process All Raw (manual)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Token {{apiToken}}", "type": "text" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/processed-attendance/process/", "host": ["{{baseUrl}}"], "path": ["api","processed-attendance","process"] }
+          }
+        },
+        {
+          "name": "Sync to CRM (manual)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Token {{apiToken}}", "type": "text" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/processed-attendance/sync/?limit=100", "host": ["{{baseUrl}}"], "path": ["api","processed-attendance","sync"], "query":[{"key":"limit","value":"100"}] }
+          }
+        },
+        {
+          "name": "Sync Stats",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Token {{apiToken}}", "type": "text" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/processed-attendance/stats/", "host": ["{{baseUrl}}"], "path": ["api","processed-attendance","stats"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Web Actions",
+      "item": [
+        {
+          "name": "Sync Day (web view)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/x-www-form-urlencoded", "type": "text" },
+              { "key": "X-CSRFToken", "value": "", "type": "text" }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                { "key": "date", "value": "2025-11-12" },
+                { "key": "device", "value": "" }
+              ]
+            },
+            "url": { "raw": "{{baseUrl}}/sync-day/", "host": ["{{baseUrl}}"], "path": ["sync-day"] }
+          },
+          "description": "Fetch raw data from device(s) for the given date and process attendance. Requires CSRF token if session-authenticated."
+        },
+        {
+          "name": "Delete Attendance (web view)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/x-www-form-urlencoded", "type": "text" },
+              { "key": "X-CSRFToken", "value": "", "type": "text" }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                { "key": "processed_id", "value": "" },
+                { "key": "which", "value": "both" }
+              ]
+            },
+            "url": { "raw": "{{baseUrl}}/attendance/delete/", "host": ["{{baseUrl}}"], "path": ["attendance","delete"] }
+          },
+          "description": "Deletes underlying RawAttendance rows for the processed attendance id and reprocesses that day. This only deletes from the bridge DB (not the physical device). Requires CSRF token for POST."
+        }
+      ]
+    }
+  ]
+}
