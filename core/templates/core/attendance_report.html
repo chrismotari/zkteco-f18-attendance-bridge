@@ -1,0 +1,251 @@
+{% extends "core/base.html" %}
+
+{% block title %}Attendance Report - {{ selected_date }}{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>📅 Daily Attendance Report</h2>
+    
+    <form method="get" class="filter-form">
+        <div>
+            <label for="date">Date:</label>
+            <input type="date" id="date" name="date" value="{{ selected_date|date:'Y-m-d' }}" required>
+        </div>
+        
+        <div>
+            <label for="device">Device:</label>
+            <select id="device" name="device">
+                <option value="">All Devices</option>
+                {% for device in devices %}
+                    <option value="{{ device.id }}" {% if selected_device_id == device.id|stringformat:"s" %}selected{% endif %}>
+                        {{ device.name }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+        
+        <button type="submit" class="btn btn-primary">Filter</button>
+        
+        <button type="button" class="btn btn-success" onclick="syncDay()">🔄 Sync This Day</button>
+        
+        <a href="{% url 'attendance_print' %}?date={{ selected_date|date:'Y-m-d' }}{% if selected_device_id %}&device={{ selected_device_id }}{% endif %}" 
+           target="_blank" class="btn btn-secondary">🖨️ Print Report</a>
+        
+        <div class="pagination" style="margin-left: auto;">
+            <a href="?date={{ prev_date|date:'Y-m-d' }}{% if selected_device_id %}&device={{ selected_device_id }}{% endif %}" class="btn btn-secondary">← Previous</a>
+            <a href="?date={{ next_date|date:'Y-m-d' }}{% if selected_device_id %}&device={{ selected_device_id }}{% endif %}" class="btn btn-secondary">Next →</a>
+            <a href="?date={{ today|date:'Y-m-d' }}{% if selected_device_id %}&device={{ selected_device_id }}{% endif %}" class="btn btn-primary">Today</a>
+        </div>
+    </form>
+</div>
+
+<!-- Statistics -->
+<div class="stats">
+    <div class="stat-box">
+        <div class="stat-label">Total Records</div>
+        <div class="stat-value">{{ statistics.total_records }}</div>
+    </div>
+    
+    <div class="stat-box success">
+        <div class="stat-label">Normal Attendance</div>
+        <div class="stat-value">{{ statistics.normal_count }}</div>
+    </div>
+    
+    <div class="stat-box warning">
+        <div class="stat-label">Outliers</div>
+        <div class="stat-value">{{ statistics.outliers_count }}</div>
+    </div>
+    
+    <div class="stat-box {% if statistics.unsynced_count > 0 %}danger{% else %}success{% endif %}">
+        <div class="stat-label">Unsynced to CRM</div>
+        <div class="stat-value">{{ statistics.unsynced_count }}</div>
+    </div>
+    
+    <div class="stat-box">
+        <div class="stat-label">Total Hours</div>
+        <div class="stat-value">{{ statistics.total_hours }}</div>
+    </div>
+</div>
+
+<!-- Attendance Table -->
+<div class="card">
+    <h2>Attendance Records for {{ selected_date|date:"F d, Y" }}</h2>
+    
+    {% if attendances %}
+    <table>
+        <thead>
+            <tr>
+                <th>User ID</th>
+                <th>User Name</th>
+                <th>Device</th>
+                <th>Clock In</th>
+                <th>Clock Out</th>
+                <th>Hours</th>
+                <th>Status</th>
+                <th>Synced</th>
+                <th>Notes</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for attendance in attendances %}
+            <tr>
+                <td><strong>{{ attendance.user_id }}</strong></td>
+                <td>{{ attendance.user_name }}</td>
+                <td>{{ attendance.device.name }}</td>
+                <td>
+                    {% if attendance.clock_in %}
+                        {{ attendance.clock_in|date:"Y-m-d H:i:s" }}
+                    {% else %}
+                        <span class="badge badge-warning">N/A</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if attendance.clock_out %}
+                        {{ attendance.clock_out|date:"Y-m-d H:i:s" }}
+                    {% else %}
+                        <span class="badge badge-warning">N/A</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if attendance.hours_worked %}
+                        {{ attendance.hours_worked|floatformat:2 }}h
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
+                <td>
+                    {% if attendance.is_outlier %}
+                        <span class="badge badge-danger">Outlier</span>
+                    {% else %}
+                        <span class="badge badge-success">Normal</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if attendance.synced_to_crm %}
+                        <span class="badge badge-success">✓ Synced</span>
+                    {% else %}
+                        <span class="badge badge-warning">Pending</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if attendance.outlier_reason %}
+                        <small style="color: #e74c3c;">{{ attendance.outlier_reason }}</small>
+                    {% endif %}
+                    {% if attendance.sync_error %}
+                        <small style="color: #e67e22;">Sync error: {{ attendance.sync_error }}</small>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="text-align: center; padding: 2rem; color: #7f8c8d;">
+        No attendance records found for {{ selected_date|date:"F d, Y" }}.
+    </p>
+    {% endif %}
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Auto-submit form when date or device changes
+    document.getElementById('date').addEventListener('change', function() {
+        this.form.submit();
+    });
+    
+    document.getElementById('device').addEventListener('change', function() {
+        this.form.submit();
+    });
+    
+    // Sync day function
+    function syncDay() {
+        const date = document.getElementById('date').value;
+        const deviceId = document.getElementById('device').value;
+        const syncBtn = event.target;
+        
+        if (!date) {
+            alert('Please select a date');
+            return;
+        }
+        
+        // Disable button and show loading state
+        syncBtn.disabled = true;
+        syncBtn.textContent = '⏳ Syncing...';
+        
+        // Prepare form data
+        const formData = new FormData();
+        formData.append('date', date);
+        if (deviceId) {
+            formData.append('device', deviceId);
+        }
+        
+        // Get CSRF token
+        const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || 
+                         getCookie('csrftoken');
+        
+        // Send sync request
+        fetch('/sync-day/', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': csrfToken,
+            },
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            syncBtn.disabled = false;
+            syncBtn.textContent = '🔄 Sync This Day';
+            
+            if (data.error) {
+                alert('Error: ' + data.error);
+            } else {
+                // Show success message
+                let message = `Sync complete for ${data.date}:\n\n`;
+                message += `Total Raw Records Fetched: ${data.total_raw_fetched}\n`;
+                message += `Total Processed: ${data.total_processed}\n\n`;
+                
+                if (data.processing_error) {
+                    message += `Processing Error: ${data.processing_error}\n\n`;
+                }
+                
+                message += 'Devices:\n';
+                data.devices.forEach(device => {
+                    message += `\n${device.name}:\n`;
+                    message += `  - Fetched: ${device.raw_fetched} new records\n`;
+                    if (device.error) {
+                        message += `  - Note: ${device.error}\n`;
+                    }
+                });
+                
+                alert(message);
+                
+                // Reload the page to show updated data
+                location.reload();
+            }
+        })
+        .catch(error => {
+            syncBtn.disabled = false;
+            syncBtn.textContent = '🔄 Sync This Day';
+            alert('Error syncing: ' + error.message);
+        });
+    }
+    
+    // Helper function to get CSRF cookie
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+</script>
+{% endblock %}

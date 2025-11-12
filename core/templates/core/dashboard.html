@@ -1,0 +1,148 @@
+{% extends "core/base.html" %}
+
+{% block title %}Dashboard - ZKTeco F18 Attendance Bridge{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>📊 Dashboard Overview</h2>
+</div>
+
+<!-- Today's Statistics -->
+<div class="stats">
+    <div class="stat-box">
+        <div class="stat-label">Today's Attendance</div>
+        <div class="stat-value">{{ today_stats.total }}</div>
+    </div>
+    
+    <div class="stat-box warning">
+        <div class="stat-label">Today's Outliers</div>
+        <div class="stat-value">{{ today_stats.outliers }}</div>
+    </div>
+    
+    <div class="stat-box {% if today_stats.unsynced > 0 %}danger{% else %}success{% endif %}">
+        <div class="stat-label">Unsynced Records</div>
+        <div class="stat-value">{{ today_stats.unsynced }}</div>
+    </div>
+    
+    <div class="stat-box">
+        <div class="stat-label">Active Devices</div>
+        <div class="stat-value">{{ devices.count }}</div>
+    </div>
+</div>
+
+<!-- Quick Actions -->
+<div class="card">
+    <h2>Quick Actions</h2>
+    <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+        <a href="{% url 'attendance_report' %}" class="btn btn-primary">View Today's Report</a>
+        <a href="/admin/core/processedattendance/" class="btn btn-secondary">Manage Records</a>
+        <a href="/admin/core/device/" class="btn btn-secondary">Manage Devices</a>
+        <a href="/api/" class="btn btn-secondary">API Documentation</a>
+    </div>
+</div>
+
+<!-- Devices -->
+<div class="card">
+    <h2>🔌 Registered Devices</h2>
+    
+    {% if devices %}
+    <table>
+        <thead>
+            <tr>
+                <th>Device Name</th>
+                <th>IP Address</th>
+                <th>Port</th>
+                <th>Status</th>
+                <th>Last Sync</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for device in devices %}
+            <tr>
+                <td><strong>{{ device.name }}</strong></td>
+                <td>{{ device.ip_address }}</td>
+                <td>{{ device.port }}</td>
+                <td>
+                    {% if device.enabled %}
+                        <span class="badge badge-success">Enabled</span>
+                    {% else %}
+                        <span class="badge badge-danger">Disabled</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if device.last_sync %}
+                        {{ device.last_sync|date:"Y-m-d H:i:s" }}
+                    {% else %}
+                        <span class="badge badge-warning">Never</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="text-align: center; padding: 2rem; color: #7f8c8d;">
+        No devices registered yet. Add devices in the <a href="/admin/core/device/">admin panel</a>.
+    </p>
+    {% endif %}
+</div>
+
+<!-- Recent Attendance -->
+<div class="card">
+    <h2>📋 Recent Attendance (Last 20)</h2>
+    
+    {% if recent_attendances %}
+    <table>
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>User ID</th>
+                <th>User Name</th>
+                <th>Device</th>
+                <th>Clock In</th>
+                <th>Clock Out</th>
+                <th>Hours</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for attendance in recent_attendances %}
+            <tr>
+                <td>{{ attendance.date|date:"Y-m-d" }}</td>
+                <td><strong>{{ attendance.user_id }}</strong></td>
+                <td>{{ attendance.user_name }}</td>
+                <td>{{ attendance.device.name }}</td>
+                <td>{{ attendance.clock_in|date:"H:i:s" }}</td>
+                <td>
+                    {% if attendance.clock_out %}
+                        {{ attendance.clock_out|date:"H:i:s" }}
+                    {% else %}
+                        <span class="badge badge-warning">N/A</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if attendance.hours_worked %}
+                        {{ attendance.hours_worked|floatformat:2 }}h
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
+                <td>
+                    {% if attendance.is_outlier %}
+                        <span class="badge badge-danger">Outlier</span>
+                    {% else %}
+                        <span class="badge badge-success">Normal</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="text-align: center; padding: 2rem; color: #7f8c8d;">
+        No attendance records yet.
+    </p>
+    {% endif %}
+</div>
+
+{% endblock %}

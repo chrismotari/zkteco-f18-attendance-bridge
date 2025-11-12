@@ -1,0 +1,28 @@
+# ZKTeco F18 Attendance Bridge Requirements
+# Python 3.8+
+
+# Django and Extensions
+Django>=4.0,<5.0
+djangorestframework>=3.14.0
+django-filter>=23.0
+
+# Database
+psycopg2-binary>=2.9.0  # PostgreSQL support (optional, can use SQLite)
+
+# Celery for background tasks
+celery>=5.3.0
+redis>=4.5.0
+django-celery-beat>=2.5.0
+
+# ZKTeco device communication
+pyzk>=0.9
+
+# HTTP requests
+requests>=2.28.0
+urllib3>=1.26.0
+
+# Environment configuration
+python-dotenv>=1.0.0
+
+# Utilities
+pytz>=2023.3
