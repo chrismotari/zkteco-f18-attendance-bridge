@@ -11,6 +11,7 @@ from .views import (
     attendance_report,
     attendance_print,
     sync_day
+    , delete_attendance
 )
 
 # Create a router and register our viewsets
@@ -26,6 +27,7 @@ urlpatterns = [
     path('report/', attendance_report, name='attendance_report'),
     path('report/print/', attendance_print, name='attendance_print'),
     path('sync-day/', sync_day, name='sync_day'),
+    path('attendance/delete/', delete_attendance, name='delete_attendance'),
     
     # API endpoints
     path('api/', include(router.urls)),

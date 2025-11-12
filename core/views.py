@@ -13,6 +13,9 @@ from .serializers import DeviceSerializer, RawAttendanceSerializer, ProcessedAtt
 from .device_utils import poll_all_devices, get_device_info
 from .processing_utils import process_all_unprocessed_attendance, get_unsynced_attendance
 from .crm_utils import sync_unsynced_attendance, get_sync_statistics
+from django.http import JsonResponse
+from django.views.decorators.http import require_POST
+from .processing_utils import process_attendance_for_date
 
 
 class DeviceViewSet(viewsets.ModelViewSet):
@@ -233,6 +236,55 @@ def attendance_report(request):
     }
     
     return render(request, 'core/attendance_report.html', context)
+
+
+@require_POST
+def delete_attendance(request):
+    """
+    Delete raw attendance records related to a processed attendance.
+
+    This removes the RawAttendance rows from the bridge database and re-processes
+    the attendance for that user/date. Note: ZKTeco devices (pyzk) generally do
+    not support deleting a single attendance record remotely; only clearing all
+    attendance logs is supported. This view only deletes records from the
+    bridge DB. Use the device management actions to clear device logs if needed.
+    """
+    processed_id = request.POST.get('processed_id')
+    delete_which = request.POST.get('which', 'both')  # 'in', 'out', or 'both'
+
+    if not processed_id:
+        return JsonResponse({'error': 'processed_id is required'}, status=400)
+
+    try:
+        processed = ProcessedAttendance.objects.select_related('device').get(id=processed_id)
+    except ProcessedAttendance.DoesNotExist:
+        return JsonResponse({'error': 'ProcessedAttendance not found'}, status=404)
+
+    # Identify raw timestamps to delete
+    to_delete = []
+    if delete_which in ('in', 'both') and processed.clock_in:
+        to_delete.append(processed.clock_in)
+    if delete_which in ('out', 'both') and processed.clock_out:
+        to_delete.append(processed.clock_out)
+
+    deleted_count = 0
+    for ts in to_delete:
+        qs = RawAttendance.objects.filter(
+            device=processed.device,
+            user_id=processed.user_id,
+            timestamp=ts
+        )
+        deleted_count += qs.count()
+        qs.delete()
+
+    # Re-process attendance for this user/date so processed record reflects deletion
+    try:
+        process_attendance_for_date(processed.user_id, processed.date, device=processed.device)
+    except Exception as e:
+        # Processing failure is not fatal for deletion, but report it
+        return JsonResponse({'deleted': deleted_count, 'processing_error': str(e)})
+
+    return JsonResponse({'deleted': deleted_count})
 
 
 def attendance_print(request):

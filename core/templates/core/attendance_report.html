@@ -84,6 +84,7 @@
                 <th>Status</th>
                 <th>Synced</th>
                 <th>Notes</th>
+                <th>Actions</th>
             </tr>
         </thead>
         <tbody>
@@ -134,6 +135,9 @@
                     {% if attendance.sync_error %}
                         <small style="color: #e67e22;">Sync error: {{ attendance.sync_error }}</small>
                     {% endif %}
+                </td>
+                <td>
+                    <button class="btn btn-danger" onclick="deleteProcessed({{ attendance.id }})">Delete</button>
                 </td>
             </tr>
             {% endfor %}
@@ -244,6 +248,35 @@
                     break;
                 }
             }
+                function deleteProcessed(processedId) {
+                    if (!confirm('Delete this attendance (will remove the underlying raw punch(s) from the bridge DB)? This CANNOT delete single records on the device.')) {
+                        return;
+                    }
+
+                    const formData = new FormData();
+                    formData.append('processed_id', processedId);
+
+                    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || getCookie('csrftoken');
+
+                    fetch('{% url "delete_attendance" %}', {
+                        method: 'POST',
+                        headers: {
+                            'X-CSRFToken': csrfToken
+                        },
+                        body: formData
+                    })
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.error) {
+                            alert('Error: ' + data.error);
+                        } else {
+                            alert('Deleted ' + data.deleted + ' raw record(s).');
+                            location.reload();
+                        }
+                    })
+                    .catch(err => alert('Error: ' + err.message));
+                }
+
         }
         return cookieValue;
     }
