@@ -8,13 +8,13 @@ from .models import Device, RawAttendance, ProcessedAttendance
 @admin.register(Device)
 class DeviceAdmin(admin.ModelAdmin):
     """Admin interface for Device model."""
-    list_display = ['name', 'ip_address', 'port', 'enabled', 'last_sync', 'created_at']
+    list_display = ['name', 'ip_address', 'secondary_ip_address', 'port', 'enabled', 'last_sync', 'created_at']
     list_filter = ['enabled', 'created_at']
-    search_fields = ['name', 'ip_address']
+    search_fields = ['name', 'ip_address', 'secondary_ip_address']
     readonly_fields = ['created_at', 'updated_at', 'last_sync']
     fieldsets = (
         ('Device Information', {
-            'fields': ('name', 'ip_address', 'port', 'enabled')
+            'fields': ('name', 'ip_address', 'secondary_ip_address', 'port', 'enabled')
         }),
         ('Sync Information', {
             'fields': ('last_sync',)

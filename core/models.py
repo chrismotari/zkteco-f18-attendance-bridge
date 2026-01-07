@@ -25,6 +25,7 @@ class Device(models.Model):
     """
     name = models.CharField(max_length=100, unique=True, help_text="Device name")
     ip_address = models.GenericIPAddressField(help_text="Device IP address")
+    secondary_ip_address = models.GenericIPAddressField(null=True, blank=True, help_text="Secondary IP address (failover)")
     port = models.IntegerField(default=4370, help_text="Device port (default 4370)")
     enabled = models.BooleanField(default=True, help_text="Is device enabled for polling")
     last_sync = models.DateTimeField(null=True, blank=True, help_text="Last successful sync timestamp")

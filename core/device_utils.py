@@ -34,10 +34,12 @@ def connect_device(device_or_ip, port=4370, timeout=5):
     # Handle both Device objects and IP addresses
     if isinstance(device_or_ip, Device):
         ip_address = device_or_ip.ip_address
+        secondary_ip = device_or_ip.secondary_ip_address
         port = device_or_ip.port
         device_name = device_or_ip.name
     else:
         ip_address = device_or_ip
+        secondary_ip = None
         device_name = ip_address
     
     try:
@@ -50,19 +52,27 @@ def connect_device(device_or_ip, port=4370, timeout=5):
         ]
         
         last_error = None
-        for attempt in connection_attempts:
-            try:
-                logger.info(f"Trying connection to {device_name} ({ip_address}):4370 (Password={attempt['password']}, UDP={attempt['force_udp']})")
-                zk = ZK(ip_address, port=port, timeout=timeout, **attempt)
-                conn = zk.connect()
-                logger.info(f"Successfully connected to {device_name} ({ip_address}):{port}")
-                return conn
-            except Exception as e:
-                last_error = e
-                continue
+        ip_addresses_to_try = [ip_address]
+        if secondary_ip:
+            ip_addresses_to_try.append(secondary_ip)
+        
+        for current_ip in ip_addresses_to_try:
+            ip_label = "primary" if current_ip == ip_address else "secondary"
+            for attempt in connection_attempts:
+                try:
+                    logger.info(f"Trying {ip_label} connection to {device_name} ({current_ip}):4370 (Password={attempt['password']}, UDP={attempt['force_udp']})")
+                    zk = ZK(current_ip, port=port, timeout=timeout, **attempt)
+                    conn = zk.connect()
+                    logger.info(f"Successfully connected to {device_name} ({current_ip}):{port} via {ip_label} IP")
+                    return conn
+                except Exception as e:
+                    last_error = e
+                    continue
+            
+            logger.warning(f"Failed to connect to {device_name} via {ip_label} IP ({current_ip})")
         
         # If all attempts failed, raise the last error
-        raise last_error if last_error else Exception("Connection failed")
+        raise last_error if last_error else Exception("Connection failed to all IP addresses")
         
     except Exception as e:
         logger.error(f"Failed to connect to device at {device_name} ({ip_address}):{port}: {str(e)}")
