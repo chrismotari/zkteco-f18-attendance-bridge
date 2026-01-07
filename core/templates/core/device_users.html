@@ -120,7 +120,14 @@
     <div>
         <a href="{% url 'device_list' %}" class="back-link">← Back to Devices</a>
         <h1>Users on {{ device.name }}</h1>
-        <p style="color: #7f8c8d; margin-top: 0.5rem;">{{ device.ip_address }}:{{ device.port }} • {{ users|length }} users on device • {{ db_user_count }} synced to database</p>
+        <p style="color: #7f8c8d; margin-top: 0.5rem;">
+            {{ device.ip_address }}:{{ device.port }} • 
+            {{ users|length }} users on device • 
+            {{ db_user_count }} synced to database
+            {% if missing_count > 0 %}
+                • <span style="color: #e74c3c; font-weight: 600;">{{ missing_count }} in DB but not on device</span>
+            {% endif %}
+        </p>
     </div>
 </div>
 
@@ -188,6 +195,37 @@
         <p style="font-size: 1.2rem;">No users found on this device.</p>
         <p>Users need to be enrolled on the physical device first.</p>
     </div>
+</div>
+{% endif %}
+
+{% if missing_from_device %}
+<div class="card" style="border-left: 4px solid #e74c3c;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h2 style="color: #e74c3c; margin: 0;">⚠️ Users in Database but Missing from Device ({{ missing_count }})</h2>
+        <button class="btn btn-danger" onclick="deleteMissingUsers()">🗑️ Delete All from Database</button>
+    </div>
+    <p style="color: #7f8c8d; margin-bottom: 1rem;">These users exist in your database but are not enrolled on the physical device. They may have been deleted from the device.</p>
+    
+    <table style="margin-top: 1rem;">
+        <thead>
+            <tr>
+                <th>User ID</th>
+                <th>Name</th>
+                <th>Card No</th>
+                <th>Last Synced</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for user in missing_from_device %}
+            <tr>
+                <td>{{ user.user_id }}</td>
+                <td>{{ user.name }}</td>
+                <td>{{ user.card_no|default:"-" }}</td>
+                <td>{{ user.updated_at|date:"Y-m-d H:i" }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
 </div>
 {% endif %}
 
@@ -329,6 +367,44 @@
         .then(data => {
             if (data.success) {
                 alert(`✅ Deletion complete!\n\nDeleted: ${data.deleted}\nFailed: ${data.failed}`);
+                location.reload();
+            } else {
+                alert(`❌ Deletion failed!\n\nError: ${data.error}`);
+            }
+        })
+        .catch(error => {
+            alert(`❌ Error: ${error}`);
+        })
+        .finally(() => {
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        });
+    }
+    
+    function deleteMissingUsers() {
+        if (!confirm('⚠️ WARNING: This will delete {{ missing_count }} user(s) from the database!\n\nThese users are not on the device anymore. Deleting them will:\n- Remove them from the database\n- Keep their attendance history intact\n\nContinue?')) {
+            return;
+        }
+        
+        const btn = event.target;
+        const originalText = btn.innerHTML;
+        btn.innerHTML = '⏳ Deleting...';
+        btn.disabled = true;
+        
+        const userIds = {{ missing_user_ids|safe }};
+        
+        fetch('{% url "device_user_delete_from_db" device.id %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify({ user_ids: userIds })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert(`✅ Deleted ${data.deleted} user(s) from database`);
                 location.reload();
             } else {
                 alert(`❌ Deletion failed!\n\nError: ${data.error}`);

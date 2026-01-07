@@ -20,6 +20,7 @@ from .views import (
     device_users,
     device_user_sync,
     device_user_delete,
+    device_user_delete_from_db,
 )
 
 # Create a router and register our viewsets
@@ -48,6 +49,7 @@ urlpatterns = [
     path('devices/<int:device_id>/users/', device_users, name='device_users'),
     path('devices/<int:device_id>/users/sync/', device_user_sync, name='device_user_sync'),
     path('devices/<int:device_id>/users/delete/', device_user_delete, name='device_user_delete'),
+    path('devices/<int:device_id>/users/delete-from-db/', device_user_delete_from_db, name='device_user_delete_from_db'),
     
     # API endpoints
     path('api/', include(router.urls)),

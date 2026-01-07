@@ -603,10 +603,18 @@ def device_users(request, device_id):
     
     # Get users from device
     device_user_list = get_device_users(device)
+    device_user_ids = set(user['user_id'] for user in device_user_list)
     
     # Get users from database for this device
     db_users = DeviceUser.objects.filter(device=device)
     db_user_ids = set(db_users.values_list('user_id', flat=True))
+    
+    # Find users in DB but not on device
+    missing_from_device_ids = db_user_ids - device_user_ids
+    missing_from_device = DeviceUser.objects.filter(
+        device=device, 
+        user_id__in=missing_from_device_ids
+    )
     
     # Get last attendance for each user on this device
     last_attendance = {}
@@ -625,6 +633,9 @@ def device_users(request, device_id):
         'device': device,
         'users': device_user_list,
         'db_user_count': db_users.count(),
+        'missing_from_device': missing_from_device,
+        'missing_count': missing_from_device.count(),
+        'missing_user_ids': list(missing_from_device_ids),
     }
     return render(request, 'core/device_users.html', context)
 
@@ -671,6 +682,39 @@ def device_user_delete(request, device_id):
                 'success': True,
                 'deleted': success_count,
                 'failed': failed_count
+            })
+        except Exception as e:
+            return JsonResponse({
+                'success': False,
+                'error': str(e)
+            })
+    
+    return JsonResponse({'success': False, 'error': 'Invalid request method'})
+
+
+def device_user_delete_from_db(request, device_id):
+    """
+    Delete users from database (for users missing from device).
+    """
+    from django.shortcuts import get_object_or_404
+    from .models import DeviceUser
+    import json
+    
+    device = get_object_or_404(Device, id=device_id)
+    
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            user_ids = data.get('user_ids', [])
+            
+            deleted_count = DeviceUser.objects.filter(
+                device=device,
+                user_id__in=user_ids
+            ).delete()[0]
+            
+            return JsonResponse({
+                'success': True,
+                'deleted': deleted_count
             })
         except Exception as e:
             return JsonResponse({
