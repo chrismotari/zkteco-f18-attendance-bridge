@@ -10,8 +10,13 @@ from .views import (
     dashboard,
     attendance_report,
     attendance_print,
-    sync_day
-    , delete_attendance
+    sync_day,
+    delete_attendance,
+    device_list,
+    device_create,
+    device_edit,
+    device_delete,
+    device_test,
 )
 
 # Create a router and register our viewsets
@@ -28,6 +33,13 @@ urlpatterns = [
     path('report/print/', attendance_print, name='attendance_print'),
     path('sync-day/', sync_day, name='sync_day'),
     path('attendance/delete/', delete_attendance, name='delete_attendance'),
+    
+    # Device management views
+    path('devices/', device_list, name='device_list'),
+    path('devices/create/', device_create, name='device_create'),
+    path('devices/<int:device_id>/edit/', device_edit, name='device_edit'),
+    path('devices/<int:device_id>/delete/', device_delete, name='device_delete'),
+    path('devices/<int:device_id>/test/', device_test, name='device_test'),
     
     # API endpoints
     path('api/', include(router.urls)),

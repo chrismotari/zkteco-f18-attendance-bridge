@@ -1,0 +1,332 @@
+{% extends 'core/base.html' %}
+
+{% block title %}Device Management - ZKTeco F18 Attendance Bridge{% endblock %}
+
+{% block extra_css %}
+<style>
+    .devices-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+        gap: 1.5rem;
+        margin-top: 1.5rem;
+    }
+    
+    .device-card {
+        background: white;
+        border-radius: 8px;
+        padding: 1.5rem;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        border-top: 4px solid #3498db;
+        transition: transform 0.2s;
+    }
+    
+    .device-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+    }
+    
+    .device-card.disabled {
+        border-top-color: #95a5a6;
+        opacity: 0.7;
+    }
+    
+    .device-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: start;
+        margin-bottom: 1rem;
+    }
+    
+    .device-name {
+        font-size: 1.3rem;
+        font-weight: 600;
+        color: #2c3e50;
+        margin-bottom: 0.25rem;
+    }
+    
+    .device-status {
+        display: inline-block;
+        padding: 0.25rem 0.75rem;
+        border-radius: 12px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+    
+    .status-enabled {
+        background: #d4edda;
+        color: #155724;
+    }
+    
+    .status-disabled {
+        background: #f8d7da;
+        color: #721c24;
+    }
+    
+    .device-info {
+        margin: 1rem 0;
+    }
+    
+    .info-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 0.5rem 0;
+        border-bottom: 1px solid #ecf0f1;
+        font-size: 0.9rem;
+    }
+    
+    .info-label {
+        color: #7f8c8d;
+        font-weight: 500;
+    }
+    
+    .info-value {
+        color: #2c3e50;
+        font-family: 'Courier New', monospace;
+    }
+    
+    .device-actions {
+        display: flex;
+        gap: 0.5rem;
+        margin-top: 1rem;
+        flex-wrap: wrap;
+    }
+    
+    .btn-sm {
+        padding: 0.4rem 0.8rem;
+        font-size: 0.85rem;
+    }
+    
+    .btn-success {
+        background: #2ecc71;
+        color: white;
+    }
+    
+    .btn-success:hover {
+        background: #27ae60;
+    }
+    
+    .btn-info {
+        background: #3498db;
+        color: white;
+    }
+    
+    .btn-info:hover {
+        background: #2980b9;
+    }
+    
+    .btn-warning {
+        background: #f39c12;
+        color: white;
+    }
+    
+    .btn-warning:hover {
+        background: #e67e22;
+    }
+    
+    .btn-danger {
+        background: #e74c3c;
+        color: white;
+    }
+    
+    .btn-danger:hover {
+        background: #c0392b;
+    }
+    
+    .form-group {
+        margin-bottom: 1rem;
+    }
+    
+    .form-group label {
+        display: block;
+        margin-bottom: 0.5rem;
+        color: #2c3e50;
+        font-weight: 500;
+    }
+    
+    .form-group input,
+    .form-group select {
+        width: 100%;
+        padding: 0.5rem;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 1rem;
+    }
+    
+    .form-group input[type="checkbox"] {
+        width: auto;
+    }
+    
+    .form-actions {
+        display: flex;
+        gap: 0.5rem;
+        margin-top: 1.5rem;
+    }
+    
+    #addDeviceForm {
+        display: none;
+        background: white;
+        padding: 1.5rem;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        margin-bottom: 1.5rem;
+    }
+    
+    #addDeviceForm.show {
+        display: block;
+    }
+    
+    .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1.5rem;
+    }
+    
+    .secondary-ip-indicator {
+        font-size: 0.75rem;
+        color: #7f8c8d;
+        margin-top: 0.25rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Device Management</h1>
+    <button class="btn btn-primary" onclick="toggleAddForm()">+ Add New Device</button>
+</div>
+
+<!-- Add Device Form -->
+<div id="addDeviceForm" class="card">
+    <h2>Add New Device</h2>
+    <form method="POST" action="{% url 'device_create' %}">
+        {% csrf_token %}
+        <div class="form-group">
+            <label for="name">Device Name *</label>
+            <input type="text" id="name" name="name" required placeholder="e.g., Main Gate">
+        </div>
+        
+        <div class="form-group">
+            <label for="ip_address">Primary IP Address *</label>
+            <input type="text" id="ip_address" name="ip_address" required placeholder="e.g., 192.168.1.100">
+        </div>
+        
+        <div class="form-group">
+            <label for="secondary_ip_address">Secondary IP Address (Optional)</label>
+            <input type="text" id="secondary_ip_address" name="secondary_ip_address" placeholder="e.g., 192.168.1.101">
+            <small style="color: #7f8c8d;">Failover IP address if primary is unreachable</small>
+        </div>
+        
+        <div class="form-group">
+            <label for="port">Port</label>
+            <input type="number" id="port" name="port" value="4370" required>
+        </div>
+        
+        <div class="form-group">
+            <label>
+                <input type="checkbox" name="enabled" checked> Enable device for polling
+            </label>
+        </div>
+        
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Create Device</button>
+            <button type="button" class="btn btn-secondary" onclick="toggleAddForm()">Cancel</button>
+        </div>
+    </form>
+</div>
+
+<!-- Devices Grid -->
+{% if devices %}
+<div class="devices-grid">
+    {% for device in devices %}
+    <div class="device-card {% if not device.enabled %}disabled{% endif %}">
+        <div class="device-header">
+            <div>
+                <div class="device-name">{{ device.name }}</div>
+                {% if device.secondary_ip_address %}
+                <div class="secondary-ip-indicator">🔄 Failover configured</div>
+                {% endif %}
+            </div>
+            <span class="device-status {% if device.enabled %}status-enabled{% else %}status-disabled{% endif %}">
+                {% if device.enabled %}Enabled{% else %}Disabled{% endif %}
+            </span>
+        </div>
+        
+        <div class="device-info">
+            <div class="info-row">
+                <span class="info-label">Primary IP:</span>
+                <span class="info-value">{{ device.ip_address }}</span>
+            </div>
+            {% if device.secondary_ip_address %}
+            <div class="info-row">
+                <span class="info-label">Secondary IP:</span>
+                <span class="info-value">{{ device.secondary_ip_address }}</span>
+            </div>
+            {% endif %}
+            <div class="info-row">
+                <span class="info-label">Port:</span>
+                <span class="info-value">{{ device.port }}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Last Sync:</span>
+                <span class="info-value">
+                    {% if device.last_sync %}
+                        {{ device.last_sync|date:"Y-m-d H:i" }}
+                    {% else %}
+                        Never
+                    {% endif %}
+                </span>
+            </div>
+        </div>
+        
+        <div class="device-actions">
+            <button class="btn btn-sm btn-success" onclick="testDevice({{ device.id }}, '{{ device.name }}')">🔌 Test</button>
+            <a href="/api/devices/{{ device.id }}/poll/" class="btn btn-sm btn-info" onclick="return confirm('Poll device {{ device.name }}?')">📥 Poll</a>
+            <a href="{% url 'device_edit' device.id %}" class="btn btn-sm btn-warning">✏️ Edit</a>
+            <a href="{% url 'device_delete' device.id %}" class="btn btn-sm btn-danger" onclick="return confirm('Delete {{ device.name }}?')">🗑️ Delete</a>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="card">
+    <p style="text-align: center; color: #7f8c8d; padding: 2rem;">
+        No devices configured. Click "Add New Device" to get started.
+    </p>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function toggleAddForm() {
+        const form = document.getElementById('addDeviceForm');
+        form.classList.toggle('show');
+    }
+    
+    function testDevice(deviceId, deviceName) {
+        const btn = event.target;
+        const originalText = btn.innerHTML;
+        btn.innerHTML = '⏳ Testing...';
+        btn.disabled = true;
+        
+        fetch(`/devices/${deviceId}/test/`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert(`✅ ${deviceName} connection successful!\n\nDevice Info:\n- Serial: ${data.serial_number || 'N/A'}\n- Firmware: ${data.firmware_version || 'N/A'}\n- Users: ${data.users_count || 'N/A'}\n- Records: ${data.attendance_count || 'N/A'}`);
+                } else {
+                    alert(`❌ ${deviceName} connection failed!\n\nError: ${data.error}`);
+                }
+            })
+            .catch(error => {
+                alert(`❌ Error testing ${deviceName}: ${error}`);
+            })
+            .finally(() => {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            });
+    }
+</script>
+{% endblock %}

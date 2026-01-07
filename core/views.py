@@ -497,3 +497,94 @@ def dashboard(request):
     }
     
     return render(request, 'core/dashboard.html', context)
+
+
+def device_list(request):
+    """
+    List all devices with management options.
+    """
+    devices = Device.objects.all().order_by('name')
+    context = {
+        'devices': devices,
+    }
+    return render(request, 'core/devices.html', context)
+
+
+def device_create(request):
+    """
+    Create a new device.
+    """
+    if request.method == 'POST':
+        from django.http import HttpResponseRedirect
+        from django.urls import reverse
+        
+        device = Device.objects.create(
+            name=request.POST.get('name'),
+            ip_address=request.POST.get('ip_address'),
+            secondary_ip_address=request.POST.get('secondary_ip_address') or None,
+            port=int(request.POST.get('port', 4370)),
+            enabled=request.POST.get('enabled') == 'on'
+        )
+        return HttpResponseRedirect(reverse('device_list'))
+    
+    return render(request, 'core/device_form.html', {'action': 'Create'})
+
+
+def device_edit(request, device_id):
+    """
+    Edit an existing device.
+    """
+    from django.shortcuts import get_object_or_404
+    from django.http import HttpResponseRedirect
+    from django.urls import reverse
+    
+    device = get_object_or_404(Device, id=device_id)
+    
+    if request.method == 'POST':
+        device.name = request.POST.get('name')
+        device.ip_address = request.POST.get('ip_address')
+        device.secondary_ip_address = request.POST.get('secondary_ip_address') or None
+        device.port = int(request.POST.get('port', 4370))
+        device.enabled = request.POST.get('enabled') == 'on'
+        device.save()
+        return HttpResponseRedirect(reverse('device_list'))
+    
+    context = {
+        'device': device,
+        'action': 'Edit'
+    }
+    return render(request, 'core/device_form.html', context)
+
+
+def device_delete(request, device_id):
+    """
+    Delete a device.
+    """
+    from django.shortcuts import get_object_or_404
+    from django.http import HttpResponseRedirect
+    from django.urls import reverse
+    
+    device = get_object_or_404(Device, id=device_id)
+    
+    if request.method == 'POST':
+        device.delete()
+        return HttpResponseRedirect(reverse('device_list'))
+    
+    context = {
+        'device': device,
+    }
+    return render(request, 'core/device_confirm_delete.html', context)
+
+
+def device_test(request, device_id):
+    """
+    Test device connection.
+    """
+    from django.shortcuts import get_object_or_404
+    from .device_utils import test_device_connection
+    
+    device = get_object_or_404(Device, id=device_id)
+    
+    result = test_device_connection(device.ip_address, device.port)
+    
+    return JsonResponse(result)

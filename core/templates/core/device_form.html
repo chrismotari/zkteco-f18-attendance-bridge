@@ -1,0 +1,90 @@
+{% extends 'core/base.html' %}
+
+{% block title %}{{ action }} Device - ZKTeco F18 Attendance Bridge{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>{{ action }} Device</h2>
+    
+    <form method="POST">
+        {% csrf_token %}
+        
+        <div class="form-group">
+            <label for="name">Device Name *</label>
+            <input type="text" id="name" name="name" required 
+                   value="{% if device %}{{ device.name }}{% endif %}" 
+                   placeholder="e.g., Main Gate">
+        </div>
+        
+        <div class="form-group">
+            <label for="ip_address">Primary IP Address *</label>
+            <input type="text" id="ip_address" name="ip_address" required 
+                   value="{% if device %}{{ device.ip_address }}{% endif %}" 
+                   placeholder="e.g., 192.168.1.100">
+        </div>
+        
+        <div class="form-group">
+            <label for="secondary_ip_address">Secondary IP Address (Optional)</label>
+            <input type="text" id="secondary_ip_address" name="secondary_ip_address" 
+                   value="{% if device %}{{ device.secondary_ip_address }}{% endif %}" 
+                   placeholder="e.g., 192.168.1.101">
+            <small style="color: #7f8c8d; display: block; margin-top: 0.25rem;">
+                Failover IP address if primary is unreachable
+            </small>
+        </div>
+        
+        <div class="form-group">
+            <label for="port">Port *</label>
+            <input type="number" id="port" name="port" required 
+                   value="{% if device %}{{ device.port }}{% else %}4370{% endif %}">
+        </div>
+        
+        <div class="form-group">
+            <label>
+                <input type="checkbox" name="enabled" 
+                       {% if not device or device.enabled %}checked{% endif %}>
+                Enable device for polling
+            </label>
+        </div>
+        
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">{{ action }} Device</button>
+            <a href="{% url 'device_list' %}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+
+<style>
+    .form-group {
+        margin-bottom: 1.5rem;
+    }
+    
+    .form-group label {
+        display: block;
+        margin-bottom: 0.5rem;
+        color: #2c3e50;
+        font-weight: 500;
+    }
+    
+    .form-group input[type="text"],
+    .form-group input[type="number"] {
+        width: 100%;
+        max-width: 500px;
+        padding: 0.75rem;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 1rem;
+    }
+    
+    .form-group input[type="checkbox"] {
+        width: auto;
+        margin-right: 0.5rem;
+    }
+    
+    .form-actions {
+        display: flex;
+        gap: 0.75rem;
+        margin-top: 2rem;
+    }
+</style>
+{% endblock %}

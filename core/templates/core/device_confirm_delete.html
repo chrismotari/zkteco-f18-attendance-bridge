@@ -1,0 +1,33 @@
+{% extends 'core/base.html' %}
+
+{% block title %}Delete Device - ZKTeco F18 Attendance Bridge{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>Delete Device</h2>
+    
+    <div style="background: #fff3cd; border-left: 4px solid #f39c12; padding: 1rem; margin: 1.5rem 0; border-radius: 4px;">
+        <strong>⚠️ Warning:</strong> This will permanently delete the device and all associated attendance records.
+    </div>
+    
+    <p style="margin: 1.5rem 0; font-size: 1.1rem;">
+        Are you sure you want to delete device <strong>{{ device.name }}</strong> ({{ device.ip_address }})?
+    </p>
+    
+    <form method="POST">
+        {% csrf_token %}
+        <div class="form-actions">
+            <button type="submit" class="btn btn-danger">Yes, Delete Device</button>
+            <a href="{% url 'device_list' %}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+
+<style>
+    .form-actions {
+        display: flex;
+        gap: 0.75rem;
+        margin-top: 2rem;
+    }
+</style>
+{% endblock %}
