@@ -7,6 +7,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.shortcuts import render
 from django.utils import timezone
+from django.conf import settings
 from datetime import datetime, timedelta
 from .models import Device, RawAttendance, ProcessedAttendance
 from .serializers import DeviceSerializer, RawAttendanceSerializer, ProcessedAttendanceSerializer
@@ -15,6 +16,7 @@ from .processing_utils import process_all_unprocessed_attendance, get_unsynced_a
 from .crm_utils import sync_unsynced_attendance, get_sync_statistics
 from django.http import JsonResponse
 from django.views.decorators.http import require_POST
+from django.views.decorators.csrf import csrf_exempt
 from .processing_utils import process_attendance_for_date
 
 
@@ -277,14 +279,35 @@ def delete_attendance(request):
         deleted_count += qs.count()
         qs.delete()
 
-    # Re-process attendance for this user/date so processed record reflects deletion
-    try:
-        process_attendance_for_date(processed.user_id, processed.date, device=processed.device)
-    except Exception as e:
-        # Processing failure is not fatal for deletion, but report it
-        return JsonResponse({'deleted': deleted_count, 'processing_error': str(e)})
+    # After deleting raw rows, check if any raw records remain for this
+    # user/device/date. If none remain, delete the processed record as well
+    # (the processed summary no longer has backing raw data). Otherwise,
+    # re-run processing for the date so the processed record is updated.
+    remaining = RawAttendance.objects.filter(
+        device=processed.device,
+        user_id=processed.user_id,
+        timestamp__date=processed.date
+    ).exists()
 
-    return JsonResponse({'deleted': deleted_count})
+    processed_deleted = False
+    if not remaining:
+        # No raw data remains for this processed attendance — remove the
+        # processed summary to keep UI consistent with source data.
+        try:
+            processed.delete()
+            processed_deleted = True
+        except Exception as e:
+            return JsonResponse({'deleted': deleted_count, 'processed_delete_error': str(e)}, status=500)
+    else:
+        # There are still raw rows for this user/date; re-process so the
+        # processed record reflects the deletion.
+        try:
+            process_attendance_for_date(processed.user_id, processed.date, device=processed.device)
+        except Exception as e:
+            # Processing failure is not fatal for deletion, but report it
+            return JsonResponse({'deleted': deleted_count, 'processing_error': str(e)})
+
+    return JsonResponse({'deleted': deleted_count, 'processed_deleted': processed_deleted})
 
 
 def attendance_print(request):
@@ -352,14 +375,12 @@ def attendance_print(request):
     return render(request, 'core/attendance_print.html', context)
 
 
+@csrf_exempt
 def sync_day(request):
     """
     Sync attendance for a specific day: fetch raw data and process it.
     """
-    from django.http import JsonResponse
-    from django.views.decorators.http import require_POST
-    from django.utils import timezone as tz
-    from .device_utils import connect_device, fetch_attendance
+    from .device_utils import fetch_attendance
     from .processing_utils import process_all_attendance_for_date
     
     if request.method != 'POST':
@@ -414,49 +435,21 @@ def sync_day(request):
                 device_result['raw_fetched'] = 0
                 device_result['error'] = f"Using {existing_count} existing records (skipped fetch)"
             else:
-                # Only fetch if we don't have data for this date
-                from zk import ZK
-                # Use shorter timeout to avoid hanging
-                zk = ZK(device.ip_address, port=device.port, timeout=15, password=1, 
-                       force_udp=True, ommit_ping=True)
-                conn = zk.connect()
-                
-                # Get attendance records (this might timeout for large datasets)
+                # Only fetch if we don't have data for this date. Use the centralized
+                # `fetch_attendance` helper which handles connection retries and
+                # conversion. Provide a larger timeout so devices with many records
+                # can complete the fetch reliably.
                 try:
-                    attendances = conn.get_attendance()
-                    
-                    # Filter for the specific date and store
-                    stored = 0
-                    for att in attendances:
-                        # Check if attendance is for the target date
-                        if att.timestamp.date() == sync_date:
-                            # Make timestamp timezone-aware
-                            if att.timestamp.tzinfo is None:
-                                aware_timestamp = tz.make_aware(att.timestamp)
-                            else:
-                                aware_timestamp = att.timestamp
-                            
-                            _, created = RawAttendance.objects.get_or_create(
-                                device=device,
-                                user_id=str(att.user_id),
-                                timestamp=aware_timestamp,
-                                defaults={
-                                    'status': att.status,
-                                    'punch_state': getattr(att, 'punch', 0),
-                                    'verify_type': getattr(att, 'verify_type', 0),
-                                }
-                            )
-                            if created:
-                                stored += 1
-                    
-                    device_result['raw_fetched'] = stored
-                    results['total_raw_fetched'] += stored
-                    
+                    # Start of the day (naive datetime) - fetch_attendance will
+                    # normalize it internally.
+                    since_dt = datetime(sync_date.year, sync_date.month, sync_date.day)
+                    # Use a longer timeout for potentially large device datasets
+                    fetch_timeout = getattr(settings, 'DEVICE_FETCH_TIMEOUT', 60)
+                    total_fetched, new_records = fetch_attendance(device, since=since_dt, timeout=fetch_timeout)
+                    device_result['raw_fetched'] = new_records
+                    results['total_raw_fetched'] += new_records
                 except Exception as fetch_error:
-                    # If fetch times out or fails, use existing data if available
                     device_result['error'] = f"Fetch failed: {str(fetch_error)}"
-                
-                conn.disconnect()
             
         except Exception as e:
             device_result['error'] = str(e)

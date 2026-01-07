@@ -69,7 +69,7 @@ def connect_device(device_or_ip, port=4370, timeout=5):
         raise
 
 
-def fetch_attendance(device: Device, since: datetime = None) -> Tuple[int, int]:
+def fetch_attendance(device: Device, since: datetime = None, timeout: int = None) -> Tuple[int, int]:
     """
     Fetch attendance logs from a ZKTeco device and store them in the database.
     
@@ -80,7 +80,11 @@ def fetch_attendance(device: Device, since: datetime = None) -> Tuple[int, int]:
     Returns:
         Tuple of (total_fetched, new_records_created)
     """
-    conn = connect_device(device.ip_address, device.port)
+    # Allow caller to override connect timeout for large datasets/devices
+    if timeout is not None:
+        conn = connect_device(device, timeout=timeout)
+    else:
+        conn = connect_device(device)
     if not conn:
         return 0, 0
     
