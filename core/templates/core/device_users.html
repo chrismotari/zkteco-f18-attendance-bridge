@@ -1,0 +1,346 @@
+{% extends 'core/base.html' %}
+
+{% block title %}Users on {{ device.name }} - ZKTeco F18 Attendance Bridge{% endblock %}
+
+{% block extra_css %}
+<style>
+    .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1.5rem;
+    }
+    
+    .back-link {
+        color: #3498db;
+        text-decoration: none;
+        font-size: 0.9rem;
+    }
+    
+    .back-link:hover {
+        text-decoration: underline;
+    }
+    
+    .actions-bar {
+        display: flex;
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+        padding: 1rem;
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    
+    .user-table {
+        background: white;
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    
+    .user-table table {
+        margin: 0;
+    }
+    
+    .user-table th {
+        background: #34495e;
+        color: white;
+        padding: 1rem;
+        text-align: left;
+    }
+    
+    .user-table td {
+        padding: 0.75rem 1rem;
+    }
+    
+    .user-table tr:hover {
+        background: #f8f9fa;
+    }
+    
+    .sync-badge {
+        display: inline-block;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+    
+    .sync-badge.synced {
+        background: #d4edda;
+        color: #155724;
+    }
+    
+    .sync-badge.not-synced {
+        background: #fff3cd;
+        color: #856404;
+    }
+    
+    .checkbox-cell {
+        width: 50px;
+        text-align: center;
+    }
+    
+    .select-all-label {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-weight: normal;
+        cursor: pointer;
+    }
+    
+    .empty-state {
+        text-align: center;
+        padding: 3rem;
+        color: #7f8c8d;
+    }
+    
+    .btn-group {
+        display: flex;
+        gap: 0.5rem;
+    }
+    
+    #selectedCount {
+        display: none;
+        align-items: center;
+        padding: 0.5rem 1rem;
+        background: #d1ecf1;
+        color: #0c5460;
+        border-radius: 4px;
+        font-size: 0.9rem;
+    }
+    
+    #selectedCount.show {
+        display: flex;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <a href="{% url 'device_list' %}" class="back-link">← Back to Devices</a>
+        <h1>Users on {{ device.name }}</h1>
+        <p style="color: #7f8c8d; margin-top: 0.5rem;">{{ device.ip_address }}:{{ device.port }} • {{ users|length }} users on device • {{ db_user_count }} synced to database</p>
+    </div>
+</div>
+
+<div class="actions-bar">
+    <div class="btn-group">
+        <button class="btn btn-primary" onclick="syncUsers()">⬇️ Sync All to Database</button>
+        <button class="btn btn-danger" id="deleteSelectedBtn" onclick="deleteSelected()" disabled>🗑️ Delete Selected from Device</button>
+    </div>
+    <input type="text" id="searchInput" placeholder="🔍 Search users..." onkeyup="searchUsers()" style="padding: 0.5rem 1rem; border: 1px solid #ddd; border-radius: 4px; width: 300px;">
+    <div id="selectedCount" style="margin-left: auto;">
+        <span id="selectedCountText">0 selected</span>
+    </div>
+</div>
+
+{% if users %}
+<div class="user-table">
+    <table>
+        <thead>
+            <tr>
+                <th class="checkbox-cell">
+                    <label class="select-all-label">
+                        <input type="checkbox" id="selectAll" onchange="toggleSelectAll()">
+                    </label>
+                </th>
+                <th>User ID</th>
+                <th>Name</th>
+                <th>Card No</th>
+                <th>Privilege</th>
+                <th>Last Punch</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for user in users %}
+            <tr>
+                <td class="checkbox-cell">
+                    <input type="checkbox" class="user-checkbox" value="{{ user.user_id }}" onchange="updateSelectedCount()">
+                </td>
+                <td>{{ user.user_id }}</td>
+                <td>{{ user.name }}</td>
+                <td>{{ user.card_no|default:"-" }}</td>
+                <td>{{ user.privilege }}</td>
+                <td>
+                    {% if user.last_punch %}
+                        {{ user.last_punch|date:"Y-m-d H:i" }}
+                    {% else %}
+                        <span style="color: #7f8c8d;">Never</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if user.in_db %}
+                    <span class="sync-badge synced">✓ In Database</span>
+                    {% else %}
+                    <span class="sync-badge not-synced">⚠ Not Synced</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="card">
+    <div class="empty-state">
+        <p style="font-size: 1.2rem;">No users found on this device.</p>
+        <p>Users need to be enrolled on the physical device first.</p>
+    </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function searchUsers() {
+        const input = document.getElementById('searchInput');
+        const filter = input.value.toLowerCase();
+        const table = document.querySelector('.user-table table tbody');
+        const rows = table.getElementsByTagName('tr');
+        
+        let visibleCount = 0;
+        for (let i = 0; i < rows.length; i++) {
+            const row = rows[i];
+            const userId = row.cells[1].textContent.toLowerCase();
+            const name = row.cells[2].textContent.toLowerCase();
+            const cardNo = row.cells[3].textContent.toLowerCase();
+            
+            if (userId.includes(filter) || name.includes(filter) || cardNo.includes(filter)) {
+                row.style.display = '';
+                visibleCount++;
+            } else {
+                row.style.display = 'none';
+                // Uncheck hidden rows
+                const checkbox = row.querySelector('.user-checkbox');
+                if (checkbox && checkbox.checked) {
+                    checkbox.checked = false;
+                }
+            }
+        }
+        
+        updateSelectedCount();
+        
+        // Update empty state7
+        const emptyState = document.getElementById('noResultsMessage');
+        if (visibleCount === 0 && filter) {
+            if (!emptyState) {
+                const tbody = table;
+                const tr = document.createElement('tr');
+                tr.id = 'noResultsMessage';
+                tr.innerHTML = '<td colspan="6" style="text-align: center; padding: 2rem; color: #7f8c8d;">No users found matching "' + input.value + '"</td>';
+                tbody.appendChild(tr);
+            }
+        } else if (emptyState) {
+            emptyState.remove();
+        }
+    }
+    
+    function toggleSelectAll() {
+        const selectAll = document.getElementById('selectAll');
+        const checkboxes = document.querySelectorAll('.user-checkbox');
+        checkboxes.forEach(cb => {
+            // Only toggle visible checkboxes
+            if (cb.closest('tr').style.display !== 'none') {
+                cb.checked = selectAll.checked;
+            }
+        });
+        updateSelectedCount();
+    }
+    
+    function updateSelectedCount() {
+        const checkboxes = document.querySelectorAll('.user-checkbox:checked');
+        const visibleCheckboxes = Array.from(checkboxes).filter(cb => cb.closest('tr').style.display !== 'none');
+        const count = visibleCheckboxes.length;
+        const countDisplay = document.getElementById('selectedCount');
+        const countText = document.getElementById('selectedCountText');
+        const deleteBtn = document.getElementById('deleteSelectedBtn');
+        
+        countText.textContent = `${count} selected`;
+        
+        if (count > 0) {
+            countDisplay.classList.add('show');
+            deleteBtn.disabled = false;
+        } else {
+            countDisplay.classList.remove('show');
+            deleteBtn.disabled = true;
+        }
+    }
+    
+    function syncUsers() {
+        const btn = event.target;
+        const originalText = btn.innerHTML;
+        btn.innerHTML = '⏳ Syncing...';
+        btn.disabled = true;
+        
+        fetch('{% url "device_user_sync" device.id %}', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert(`✅ Sync successful!\n\nTotal: ${data.total} users\nCreated: ${data.created}\nUpdated: ${data.updated}`);
+                location.reload();
+            } else {
+                alert(`❌ Sync failed!\n\nError: ${data.error}`);
+            }
+        })
+        .catch(error => {
+            alert(`❌ Error: ${error}`);
+        })
+        .finally(() => {
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        });
+    }
+    
+    function deleteSelected() {
+        const checkboxes = document.querySelectorAll('.user-checkbox:checked');
+        const userIds = Array.from(checkboxes).map(cb => cb.value);
+        
+        if (userIds.length === 0) {
+            alert('Please select users to delete');
+            return;
+        }
+        
+        if (!confirm(`⚠️ WARNING: This will permanently delete ${userIds.length} user(s) from the device!\n\nThis will remove:\n- Their fingerprint data\n- Their face data\n- All biometric enrollment\n\nThey will NOT be able to punch in/out until re-enrolled.\n\nContinue?`)) {
+            return;
+        }
+        
+        const btn = event.target;
+        const originalText = btn.innerHTML;
+        btn.innerHTML = '⏳ Deleting...';
+        btn.disabled = true;
+        
+        fetch('{% url "device_user_delete" device.id %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify({ user_ids: userIds })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert(`✅ Deletion complete!\n\nDeleted: ${data.deleted}\nFailed: ${data.failed}`);
+                location.reload();
+            } else {
+                alert(`❌ Deletion failed!\n\nError: ${data.error}`);
+            }
+        })
+        .catch(error => {
+            alert(`❌ Error: ${error}`);
+        })
+        .finally(() => {
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        });
+    }
+</script>
+{% endblock %}

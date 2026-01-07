@@ -46,7 +46,7 @@ class Device(models.Model):
         self.save(update_fields=['last_sync'])
 
 
-class User(models.Model):
+class DeviceUser(models.Model):
     """
     Represents a user/employee from ZKTeco device.
     
@@ -67,14 +67,14 @@ class User(models.Model):
     password = models.CharField(max_length=50, blank=True, help_text="User password")
     group_id = models.CharField(max_length=50, blank=True, help_text="User group ID")
     card_no = models.CharField(max_length=50, blank=True, help_text="Card number")
-    device = models.ForeignKey(Device, on_delete=models.CASCADE, related_name='users', help_text="Source device")
+    device = models.ForeignKey(Device, on_delete=models.CASCADE, related_name='device_users', help_text="Source device")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ['user_id']
-        verbose_name = 'User'
-        verbose_name_plural = 'Users'
+        verbose_name = 'Device User'
+        verbose_name_plural = 'Device Users'
 
     def __str__(self):
         return f"{self.name} ({self.user_id})"
@@ -167,11 +167,11 @@ class ProcessedAttendance(models.Model):
 
     @property
     def user_name(self):
-        """Get the user's name from the User model."""
+        """Get the user's name from the DeviceUser model."""
         try:
-            user = User.objects.get(user_id=self.user_id)
+            user = DeviceUser.objects.get(user_id=self.user_id)
             return user.name
-        except User.DoesNotExist:
+        except DeviceUser.DoesNotExist:
             return self.user_id  # Fallback to user_id if name not found
 
     @property

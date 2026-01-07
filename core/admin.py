@@ -2,7 +2,7 @@
 Django admin configuration for attendance bridge models.
 """
 from django.contrib import admin
-from .models import Device, RawAttendance, ProcessedAttendance
+from .models import Device, RawAttendance, ProcessedAttendance, DeviceUser
 
 
 @admin.register(Device)
@@ -18,6 +18,27 @@ class DeviceAdmin(admin.ModelAdmin):
         }),
         ('Sync Information', {
             'fields': ('last_sync',)
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+
+
+@admin.register(DeviceUser)
+class DeviceUserAdmin(admin.ModelAdmin):
+    """Admin interface for DeviceUser model."""
+    list_display = ['user_id', 'name', 'device', 'card_no', 'privilege', 'created_at']
+    list_filter = ['device', 'privilege', 'created_at']
+    search_fields = ['user_id', 'name', 'card_no']
+    readonly_fields = ['created_at', 'updated_at']
+    fieldsets = (
+        ('User Information', {
+            'fields': ('user_id', 'name', 'device', 'privilege')
+        }),
+        ('Additional Info', {
+            'fields': ('card_no', 'group_id', 'password')
         }),
         ('Timestamps', {
             'fields': ('created_at', 'updated_at'),

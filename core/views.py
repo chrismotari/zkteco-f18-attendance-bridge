@@ -588,3 +588,94 @@ def device_test(request, device_id):
     result = test_device_connection(device.ip_address, device.port)
     
     return JsonResponse(result)
+
+
+def device_users(request, device_id):
+    """
+    List users on a device with management options.
+    """
+    from django.shortcuts import get_object_or_404
+    from .device_utils import get_device_users
+    from .models import DeviceUser, RawAttendance
+    from django.db.models import Max
+    
+    device = get_object_or_404(Device, id=device_id)
+    
+    # Get users from device
+    device_user_list = get_device_users(device)
+    
+    # Get users from database for this device
+    db_users = DeviceUser.objects.filter(device=device)
+    db_user_ids = set(db_users.values_list('user_id', flat=True))
+    
+    # Get last attendance for each user on this device
+    last_attendance = {}
+    attendance_data = RawAttendance.objects.filter(device=device).values('user_id').annotate(
+        last_punch=Max('timestamp')
+    )
+    for item in attendance_data:
+        last_attendance[item['user_id']] = item['last_punch']
+    
+    # Mark which users are synced to DB and add last punch time
+    for user in device_user_list:
+        user['in_db'] = user['user_id'] in db_user_ids
+        user['last_punch'] = last_attendance.get(user['user_id'])
+    
+    context = {
+        'device': device,
+        'users': device_user_list,
+        'db_user_count': db_users.count(),
+    }
+    return render(request, 'core/device_users.html', context)
+
+
+def device_user_sync(request, device_id):
+    """
+    Sync users from device to database.
+    """
+    from django.shortcuts import get_object_or_404
+    from .device_utils import sync_device_users_to_db
+    
+    device = get_object_or_404(Device, id=device_id)
+    
+    result = sync_device_users_to_db(device)
+    
+    return JsonResponse(result)
+
+
+def device_user_delete(request, device_id):
+    """
+    Delete selected users from device.
+    """
+    from django.shortcuts import get_object_or_404
+    from .device_utils import delete_device_user
+    import json
+    
+    device = get_object_or_404(Device, id=device_id)
+    
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            user_ids = data.get('user_ids', [])
+            
+            success_count = 0
+            failed_count = 0
+            
+            for user_id in user_ids:
+                if delete_device_user(device, user_id):
+                    success_count += 1
+                else:
+                    failed_count += 1
+            
+            return JsonResponse({
+                'success': True,
+                'deleted': success_count,
+                'failed': failed_count
+            })
+        except Exception as e:
+            return JsonResponse({
+                'success': False,
+                'error': str(e)
+            })
+    
+    return JsonResponse({'success': False, 'error': 'Invalid request method'})

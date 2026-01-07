@@ -348,3 +348,146 @@ def clear_device_attendance(device: Device) -> bool:
             conn.disconnect()
         except:
             pass
+
+
+def get_device_users(device: Device) -> list:
+    """
+    Get all users from a device.
+    
+    Args:
+        device: Device model instance
+    
+    Returns:
+        List of user dictionaries with user info
+    """
+    conn = connect_device(device)
+    if not conn:
+        return []
+    
+    try:
+        users = conn.get_users()
+        user_list = []
+        
+        for user in users:
+            user_list.append({
+                'user_id': str(user.user_id),
+                'name': user.name or f"User {user.user_id}",
+                'privilege': user.privilege,
+                'password': user.password or '',
+                'group_id': str(user.group_id) if hasattr(user, 'group_id') else '',
+                'card_no': str(user.card_no) if hasattr(user, 'card_no') else '',
+            })
+        
+        return user_list
+    except Exception as e:
+        logger.error(f"Error getting users from device {device.name}: {str(e)}")
+        return []
+    finally:
+        try:
+            conn.disconnect()
+        except:
+            pass
+
+
+def delete_device_user(device: Device, user_id: str) -> bool:
+    """
+    Delete a user from a device.
+    
+    Args:
+        device: Device model instance
+        user_id: User ID to delete
+    
+    Returns:
+        True if successful, False otherwise
+    """
+    conn = connect_device(device)
+    if not conn:
+        return False
+    
+    try:
+        conn.disable_device()
+        
+        # pyzk's delete_user requires uid as integer, but it has a 16-bit limit
+        # For user_ids that are too large, we need to use the user_id string directly
+        try:
+            uid_int = int(user_id)
+            # Check if within 16-bit signed integer range (-32768 to 32767)
+            if -32768 <= uid_int <= 32767:
+                conn.delete_user(uid=uid_int)
+            else:
+                # For large user IDs, try deleting by user_id string
+                conn.delete_user(user_id=user_id)
+        except (ValueError, TypeError):
+            # If user_id is not a valid integer, try as string
+            conn.delete_user(user_id=user_id)
+        
+        logger.info(f"Deleted user {user_id} from device {device.name}")
+        conn.enable_device()
+        return True
+    except Exception as e:
+        logger.error(f"Error deleting user {user_id} from device {device.name}: {str(e)}")
+        return False
+    finally:
+        try:
+            conn.enable_device()
+        except:
+            pass
+        try:
+            conn.disconnect()
+        except:
+            pass
+
+
+def sync_device_users_to_db(device: Device) -> dict:
+    """
+    Sync users from device to database.
+    
+    Args:
+        device: Device model instance
+    
+    Returns:
+        Dictionary with sync results
+    """
+    from .models import DeviceUser
+    
+    conn = connect_device(device)
+    if not conn:
+        return {'success': False, 'error': 'Failed to connect to device'}
+    
+    try:
+        users = conn.get_users()
+        created_count = 0
+        updated_count = 0
+        
+        for user in users:
+            user_obj, created = DeviceUser.objects.update_or_create(
+                user_id=str(user.user_id),
+                defaults={
+                    'name': user.name or f"User {user.user_id}",
+                    'privilege': user.privilege,
+                    'password': user.password or '',
+                    'group_id': str(user.group_id) if hasattr(user, 'group_id') else '',
+                    'card_no': str(user.card_no) if hasattr(user, 'card_no') else '',
+                    'device': device,
+                }
+            )
+            
+            if created:
+                created_count += 1
+            else:
+                updated_count += 1
+        
+        return {
+            'success': True,
+            'total': len(users),
+            'created': created_count,
+            'updated': updated_count
+        }
+    except Exception as e:
+        logger.error(f"Error syncing users from device {device.name}: {str(e)}")
+        return {'success': False, 'error': str(e)}
+    finally:
+        try:
+            conn.disconnect()
+        except:
+            pass

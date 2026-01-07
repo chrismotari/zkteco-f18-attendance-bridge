@@ -282,6 +282,7 @@
         <div class="device-actions">
             <button class="btn btn-sm btn-success" onclick="testDevice({{ device.id }}, '{{ device.name }}')">🔌 Test</button>
             <a href="/api/devices/{{ device.id }}/poll/" class="btn btn-sm btn-info" onclick="return confirm('Poll device {{ device.name }}?')">📥 Poll</a>
+            <a href="{% url 'device_users' device.id %}" class="btn btn-sm btn-info">👥 Users</a>
             <a href="{% url 'device_edit' device.id %}" class="btn btn-sm btn-warning">✏️ Edit</a>
             <a href="{% url 'device_delete' device.id %}" class="btn btn-sm btn-danger" onclick="return confirm('Delete {{ device.name }}?')">🗑️ Delete</a>
         </div>

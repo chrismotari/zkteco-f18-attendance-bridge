@@ -3,7 +3,7 @@ Management command to sync users from ZKTeco devices.
 """
 import logging
 from django.core.management.base import BaseCommand
-from core.models import Device, User
+from core.models import Device, DeviceUser
 from core.device_utils import connect_device
 
 logger = logging.getLogger('core')
@@ -50,7 +50,7 @@ class Command(BaseCommand):
                 self.stdout.write(f"Found {len(users)} users on device")
                 
                 for user in users:
-                    user_obj, created = User.objects.update_or_create(
+                    user_obj, created = DeviceUser.objects.update_or_create(
                         user_id=str(user.user_id),
                         defaults={
                             'name': user.name or f"User {user.user_id}",
