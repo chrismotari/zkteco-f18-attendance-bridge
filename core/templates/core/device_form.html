@@ -40,6 +40,22 @@
         </div>
         
         <div class="form-group">
+            <label for="timezone">Timezone *</label>
+            <select id="timezone" name="timezone" required>
+                <option value="UTC" {% if device.timezone == 'UTC' or not device %}selected{% endif %}>UTC</option>
+                <option value="Africa/Nairobi" {% if device.timezone == 'Africa/Nairobi' %}selected{% endif %}>Africa/Nairobi (EAT)</option>
+                <option value="Africa/Lagos" {% if device.timezone == 'Africa/Lagos' %}selected{% endif %}>Africa/Lagos (WAT)</option>
+                <option value="Africa/Johannesburg" {% if device.timezone == 'Africa/Johannesburg' %}selected{% endif %}>Africa/Johannesburg (SAST)</option>
+                <option value="Europe/London" {% if device.timezone == 'Europe/London' %}selected{% endif %}>Europe/London (GMT/BST)</option>
+                <option value="America/New_York" {% if device.timezone == 'America/New_York' %}selected{% endif %}>America/New_York (EST/EDT)</option>
+                <option value="Asia/Dubai" {% if device.timezone == 'Asia/Dubai' %}selected{% endif %}>Asia/Dubai (GST)</option>
+            </select>
+            <small style="color: #7f8c8d; display: block; margin-top: 0.25rem;">
+                Timezone of the device's physical location
+            </small>
+        </div>
+        
+        <div class="form-group">
             <label>
                 <input type="checkbox" name="enabled" 
                        {% if not device or device.enabled %}checked{% endif %}>

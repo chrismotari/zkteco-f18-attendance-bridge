@@ -223,6 +223,22 @@
         </div>
         
         <div class="form-group">
+            <label for="timezone">Timezone</label>
+            <select id="timezone" name="timezone" required>
+                <option value="Africa/Nairobi" selected>Africa/Nairobi (EAT)</option>
+                <option value="UTC">UTC</option>
+                <option value="Africa/Lagos">Africa/Lagos (WAT)</option>
+                <option value="Africa/Johannesburg">Africa/Johannesburg (SAST)</option>
+                <option value="Europe/London">Europe/London (GMT/BST)</option>
+                <option value="America/New_York">America/New_York (EST/EDT)</option>
+                <option value="Asia/Dubai">Asia/Dubai (GST)</option>
+            </select>
+            <small style="color: #7f8c8d; display: block; margin-top: 0.25rem;">
+                Physical location timezone of the device
+            </small>
+        </div>
+        
+        <div class="form-group">
             <label>
                 <input type="checkbox" name="enabled" checked> Enable device for polling
             </label>

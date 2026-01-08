@@ -1,4 +1,5 @@
 {% extends "core/base.html" %}
+{% load timezone_filters %}
 
 {% block title %}Dashboard - ZKTeco F18 Attendance Bridge{% endblock %}
 
@@ -71,7 +72,7 @@
                 </td>
                 <td>
                     {% if device.last_sync %}
-                        {{ device.last_sync|date:"Y-m-d H:i:s" }}
+                        {{ device.last_sync|format_datetime }}
                     {% else %}
                         <span class="badge badge-warning">Never</span>
                     {% endif %}
@@ -113,10 +114,10 @@
                 <td><strong>{{ attendance.user_id }}</strong></td>
                 <td>{{ attendance.user_name }}</td>
                 <td>{{ attendance.device.name }}</td>
-                <td>{{ attendance.clock_in|date:"H:i:s" }}</td>
+                <td>{{ attendance.clock_in|format_time }}</td>
                 <td>
                     {% if attendance.clock_out %}
-                        {{ attendance.clock_out|date:"H:i:s" }}
+                        {{ attendance.clock_out|format_time }}
                     {% else %}
                         <span class="badge badge-warning">N/A</span>
                     {% endif %}

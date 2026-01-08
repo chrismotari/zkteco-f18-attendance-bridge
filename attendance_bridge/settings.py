@@ -163,6 +163,9 @@ ZKTECO_TIMEOUT = int(os.getenv('ZKTECO_TIMEOUT', '10'))
 # Set via environment variable DEVICE_TIME_ZONE (e.g. 'Africa/Nairobi' for EAT devices).
 DEVICE_TIME_ZONE = os.getenv('DEVICE_TIME_ZONE', 'Africa/Nairobi')
 
+# Display timezone for frontend (used for showing timestamps to users)
+DISPLAY_TIMEZONE = os.getenv('DISPLAY_TIMEZONE', 'Africa/Nairobi')
+
 # Polling Configuration
 POLLING_INTERVAL_MINUTES = int(os.getenv('POLLING_INTERVAL_MINUTES', '15'))
 
@@ -170,6 +173,11 @@ POLLING_INTERVAL_MINUTES = int(os.getenv('POLLING_INTERVAL_MINUTES', '15'))
 WORK_START_TIME = os.getenv('WORK_START_TIME', '08:00')
 WORK_END_TIME = os.getenv('WORK_END_TIME', '18:00')
 OVERNIGHT_SHIFT = os.getenv('OVERNIGHT_SHIFT', 'False').lower() == 'true'
+OVERNIGHT_SHIFT_BUFFER_HOURS = int(os.getenv('OVERNIGHT_SHIFT_BUFFER_HOURS', '2'))
+
+# Late/Early Detection Configuration (in hours)
+LATE_CLOCK_IN_BUFFER_HOURS = int(os.getenv('LATE_CLOCK_IN_BUFFER_HOURS', '2'))
+EARLY_CLOCK_OUT_BUFFER_HOURS = int(os.getenv('EARLY_CLOCK_OUT_BUFFER_HOURS', '2'))
 
 # Outlier Detection Configuration (in hours)
 OUTLIER_EARLY_CLOCK_IN_HOURS = int(os.getenv('OUTLIER_EARLY_CLOCK_IN_HOURS', '2'))

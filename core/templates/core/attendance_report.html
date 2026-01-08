@@ -1,4 +1,5 @@
 {% extends "core/base.html" %}
+{% load timezone_filters %}
 
 {% block title %}Attendance Report - {{ selected_date }}{% endblock %}
 
@@ -24,17 +25,21 @@
             </select>
         </div>
         
+        <input type="text" id="search" name="search" value="{{ search_query }}" placeholder="🔍 Search by ID or Name..." onkeyup="searchAttendance()" style="padding: 0.5rem 1rem; border: 1px solid #ddd; border-radius: 4px; width: 300px;">
+        
         <button type="submit" class="btn btn-primary">Filter</button>
         
         <button type="button" class="btn btn-success" onclick="syncDay()">🔄 Sync This Day</button>
         
-        <a href="{% url 'attendance_print' %}?date={{ selected_date|date:'Y-m-d' }}{% if selected_device_id %}&device={{ selected_device_id }}{% endif %}" 
+        <button type="button" class="btn btn-secondary" onclick="reprocessDay()">🔁 Recalculate Flags</button>
+        
+        <a href="{% url 'attendance_print' %}?date={{ selected_date|date:'Y-m-d' }}{% if selected_device_id %}&device={{ selected_device_id }}{% endif %}{% if search_query %}&search={{ search_query }}{% endif %}" 
            target="_blank" class="btn btn-secondary">🖨️ Print Report</a>
         
         <div class="pagination" style="margin-left: auto;">
-            <a href="?date={{ prev_date|date:'Y-m-d' }}{% if selected_device_id %}&device={{ selected_device_id }}{% endif %}" class="btn btn-secondary">← Previous</a>
-            <a href="?date={{ next_date|date:'Y-m-d' }}{% if selected_device_id %}&device={{ selected_device_id }}{% endif %}" class="btn btn-secondary">Next →</a>
-            <a href="?date={{ today|date:'Y-m-d' }}{% if selected_device_id %}&device={{ selected_device_id }}{% endif %}" class="btn btn-primary">Today</a>
+            <a href="?date={{ prev_date|date:'Y-m-d' }}{% if selected_device_id %}&device={{ selected_device_id }}{% endif %}{% if search_query %}&search={{ search_query }}{% endif %}" class="btn btn-secondary">← Previous</a>
+            <a href="?date={{ next_date|date:'Y-m-d' }}{% if selected_device_id %}&device={{ selected_device_id }}{% endif %}{% if search_query %}&search={{ search_query }}{% endif %}" class="btn btn-secondary">Next →</a>
+            <a href="?date={{ today|date:'Y-m-d' }}{% if selected_device_id %}&device={{ selected_device_id }}{% endif %}{% if search_query %}&search={{ search_query }}{% endif %}" class="btn btn-primary">Today</a>
         </div>
     </form>
 </div>
@@ -51,6 +56,16 @@
         <div class="stat-value">{{ statistics.normal_count }}</div>
     </div>
     
+    <div class="stat-box" style="background: #fff3e0; border-left: 4px solid #ff9800;">
+        <div class="stat-label">Late Arrivals</div>
+        <div class="stat-value" style="color: #ff9800;">{{ statistics.late_arrivals }}</div>
+    </div>
+    
+    <div class="stat-box" style="background: #ffebee; border-left: 4px solid #f44336;">
+        <div class="stat-label">Early Departures</div>
+        <div class="stat-value" style="color: #f44336;">{{ statistics.early_departures }}</div>
+    </div>
+    
     <div class="stat-box warning">
         <div class="stat-label">Outliers</div>
         <div class="stat-value">{{ statistics.outliers_count }}</div>
@@ -59,11 +74,6 @@
     <div class="stat-box {% if statistics.unsynced_count > 0 %}danger{% else %}success{% endif %}">
         <div class="stat-label">Unsynced to CRM</div>
         <div class="stat-value">{{ statistics.unsynced_count }}</div>
-    </div>
-    
-    <div class="stat-box">
-        <div class="stat-label">Total Hours</div>
-        <div class="stat-value">{{ statistics.total_hours }}</div>
     </div>
 </div>
 
@@ -95,14 +105,14 @@
                 <td>{{ attendance.device.name }}</td>
                 <td>
                     {% if attendance.clock_in %}
-                        {{ attendance.clock_in|date:"Y-m-d H:i:s" }}
+                        {{ attendance.clock_in|format_datetime }}
                     {% else %}
                         <span class="badge badge-warning">N/A</span>
                     {% endif %}
                 </td>
                 <td>
                     {% if attendance.clock_out %}
-                        {{ attendance.clock_out|date:"Y-m-d H:i:s" }}
+                        {{ attendance.clock_out|format_datetime }}
                     {% else %}
                         <span class="badge badge-warning">N/A</span>
                     {% endif %}
@@ -115,10 +125,17 @@
                     {% endif %}
                 </td>
                 <td>
+                    {% if attendance.is_late_arrival %}
+                        <span class="badge" style="background: #ff9800; color: white;">⏰ Late Arrival</span>
+                    {% endif %}
+                    {% if attendance.is_early_departure %}
+                        <span class="badge" style="background: #f44336; color: white;">⏱️ Early Departure</span>
+                    {% endif %}
                     {% if attendance.is_outlier %}
-                        <span class="badge badge-danger">Outlier</span>
-                    {% else %}
-                        <span class="badge badge-success">Normal</span>
+                        <span class="badge" style="background: #ffc107; color: #333;">⚠️ Outlier</span>
+                    {% endif %}
+                    {% if not attendance.is_late_arrival and not attendance.is_early_departure and not attendance.is_outlier %}
+                        <span class="badge badge-success">✓ Normal</span>
                     {% endif %}
                 </td>
                 <td>
@@ -236,6 +253,57 @@
         });
     }
     
+    // Reprocess day function
+    function reprocessDay() {
+        const date = document.getElementById('date').value;
+        const deviceId = document.getElementById('device').value;
+        const btn = event.target;
+        
+        if (!date) {
+            alert('Please select a date');
+            return;
+        }
+        
+        if (!confirm(`Recalculate late/early/outlier flags for ${date}? This will update existing records based on current settings.`)) {
+            return;
+        }
+        
+        btn.disabled = true;
+        btn.textContent = '⏳ Processing...';
+        
+        const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || getCookie('csrftoken');
+        
+        fetch('/attendance/reprocess/', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': csrfToken,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                start_date: date,
+                end_date: date,
+                device_id: deviceId || null
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            btn.disabled = false;
+            btn.textContent = '🔁 Recalculate Flags';
+            
+            if (data.success) {
+                alert(`Successfully reprocessed ${data.processed} attendance records for ${data.date_range}`);
+                location.reload();
+            } else {
+                alert('Error: ' + data.error);
+            }
+        })
+        .catch(error => {
+            btn.disabled = false;
+            btn.textContent = '🔁 Recalculate Flags';
+            alert('Error reprocessing: ' + error.message);
+        });
+    }
+    
     // Helper function to get CSRF cookie
     function getCookie(name) {
         let cookieValue = null;
@@ -279,6 +347,27 @@
 
         }
         return cookieValue;
+    }
+    
+    function searchAttendance() {
+        const input = document.getElementById('search');
+        const filter = input.value.toLowerCase();
+        const table = document.querySelector('table tbody');
+        const rows = table.getElementsByTagName('tr');
+        
+        let visibleCount = 0;
+        for (let i = 0; i < rows.length; i++) {
+            const row = rows[i];
+            const userId = row.cells[0].textContent.toLowerCase();
+            const userName = row.cells[1].textContent.toLowerCase();
+            
+            if (userId.includes(filter) || userName.includes(filter)) {
+                row.style.display = '';
+                visibleCount++;
+            } else {
+                row.style.display = 'none';
+            }
+        }
     }
 </script>
 {% endblock %}

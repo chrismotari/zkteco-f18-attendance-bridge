@@ -14,7 +14,7 @@ class DeviceAdmin(admin.ModelAdmin):
     readonly_fields = ['created_at', 'updated_at', 'last_sync']
     fieldsets = (
         ('Device Information', {
-            'fields': ('name', 'ip_address', 'secondary_ip_address', 'port', 'enabled')
+            'fields': ('name', 'ip_address', 'secondary_ip_address', 'port', 'timezone', 'enabled')
         }),
         ('Sync Information', {
             'fields': ('last_sync',)
@@ -68,8 +68,8 @@ class RawAttendanceAdmin(admin.ModelAdmin):
 @admin.register(ProcessedAttendance)
 class ProcessedAttendanceAdmin(admin.ModelAdmin):
     """Admin interface for ProcessedAttendance model."""
-    list_display = ['user_id', 'date', 'clock_in', 'clock_out', 'is_outlier', 'synced_to_crm', 'device']
-    list_filter = ['is_outlier', 'synced_to_crm', 'device', 'date']
+    list_display = ['user_id', 'date', 'clock_in', 'clock_out', 'is_late_arrival', 'is_early_departure', 'is_outlier', 'synced_to_crm', 'device']
+    list_filter = ['is_late_arrival', 'is_early_departure', 'is_outlier', 'synced_to_crm', 'device', 'date']
     search_fields = ['user_id']
     readonly_fields = ['created_at', 'updated_at', 'last_sync_attempt']
     date_hierarchy = 'date'
@@ -77,8 +77,8 @@ class ProcessedAttendanceAdmin(admin.ModelAdmin):
         ('Attendance Information', {
             'fields': ('device', 'user_id', 'date', 'clock_in', 'clock_out')
         }),
-        ('Outlier Information', {
-            'fields': ('is_outlier', 'outlier_reason')
+        ('Flags', {
+            'fields': ('is_late_arrival', 'is_early_departure', 'is_outlier', 'outlier_reason')
         }),
         ('Sync Information', {
             'fields': ('synced_to_crm', 'sync_attempts', 'last_sync_attempt')

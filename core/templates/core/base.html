@@ -186,11 +186,15 @@
             background: #7f8c8d;
         }
         
-        input[type="date"], select {
+        input[type="date"], input[type="text"], select {
             padding: 0.5rem;
             border: 1px solid #ddd;
             border-radius: 4px;
             font-size: 1rem;
+        }
+        
+        input[type="text"]::placeholder {
+            color: #999;
         }
         
         .filter-form {

@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    {% load timezone_filters %}
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Attendance Report - {{ selected_date|date:"F d, Y" }}</title>
@@ -196,14 +197,14 @@
                 <td>{{ attendance.device.name }}</td>
                 <td>
                     {% if attendance.clock_in %}
-                        {{ attendance.clock_in|date:"Y-m-d H:i:s" }}
+                        {{ attendance.clock_in|format_datetime }}
                     {% else %}
                         -
                     {% endif %}
                 </td>
                 <td>
                     {% if attendance.clock_out %}
-                        {{ attendance.clock_out|date:"Y-m-d H:i:s" }}
+                        {{ attendance.clock_out|format_datetime }}
                     {% else %}
                         -
                     {% endif %}
@@ -216,10 +217,17 @@
                     {% endif %}
                 </td>
                 <td>
+                    {% if attendance.is_late_arrival %}
+                        <span class="badge" style="background: #ff9800; color: white; padding: 2px 6px; border-radius: 3px; font-size: 9pt;">⏰ Late</span>
+                    {% endif %}
+                    {% if attendance.is_early_departure %}
+                        <span class="badge" style="background: #f44336; color: white; padding: 2px 6px; border-radius: 3px; font-size: 9pt;">⏱️ Early</span>
+                    {% endif %}
                     {% if attendance.is_outlier %}
-                        <span class="badge badge-danger">Outlier</span>
-                    {% else %}
-                        <span class="badge badge-success">Normal</span>
+                        <span class="badge" style="background: #ffc107; color: #333; padding: 2px 6px; border-radius: 3px; font-size: 9pt;">⚠️ Outlier</span>
+                    {% endif %}
+                    {% if not attendance.is_late_arrival and not attendance.is_early_departure and not attendance.is_outlier %}
+                        <span class="badge badge-success">✓ Normal</span>
                     {% endif %}
                 </td>
                 <td>

@@ -12,6 +12,7 @@ from .views import (
     attendance_print,
     sync_day,
     delete_attendance,
+    reprocess_attendance,
     device_list,
     device_create,
     device_edit,
@@ -37,6 +38,7 @@ urlpatterns = [
     path('report/print/', attendance_print, name='attendance_print'),
     path('sync-day/', sync_day, name='sync_day'),
     path('attendance/delete/', delete_attendance, name='delete_attendance'),
+    path('attendance/reprocess/', reprocess_attendance, name='reprocess_attendance'),
     
     # Device management views
     path('devices/', device_list, name='device_list'),

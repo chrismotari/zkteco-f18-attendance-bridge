@@ -9,13 +9,13 @@ from django.shortcuts import render
 from django.utils import timezone
 from django.conf import settings
 from datetime import datetime, timedelta
-from .models import Device, RawAttendance, ProcessedAttendance
+from .models import Device, RawAttendance, ProcessedAttendance, DeviceUser
 from .serializers import DeviceSerializer, RawAttendanceSerializer, ProcessedAttendanceSerializer
 from .device_utils import poll_all_devices, get_device_info
 from .processing_utils import process_all_unprocessed_attendance, get_unsynced_attendance
 from .crm_utils import sync_unsynced_attendance, get_sync_statistics
 from django.http import JsonResponse
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_POST, require_http_methods
 from django.views.decorators.csrf import csrf_exempt
 from .processing_utils import process_attendance_for_date
 
@@ -191,12 +191,24 @@ def attendance_report(request):
     # Get device filter
     device_id = request.GET.get('device')
     
+    # Get search query
+    search_query = request.GET.get('search', '').strip()
+    
     # Query processed attendance for selected date
     attendances = ProcessedAttendance.objects.filter(date=selected_date)
     
     # Apply device filter if specified
     if device_id:
         attendances = attendances.filter(device_id=device_id)
+    
+    # Apply search filter if specified
+    if search_query:
+        from django.db.models import Q
+        # Search in user_id or user_name (via DeviceUser)
+        attendances = attendances.filter(
+            Q(user_id__icontains=search_query) |
+            Q(user_id__in=DeviceUser.objects.filter(name__icontains=search_query).values_list('user_id', flat=True))
+        )
     
     # Order by user_id
     attendances = attendances.select_related('device').order_by('user_id')
@@ -207,7 +219,13 @@ def attendance_report(request):
     # Calculate statistics
     total_records = attendances.count()
     outliers_count = attendances.filter(is_outlier=True).count()
-    normal_count = total_records - outliers_count
+    late_arrivals = attendances.filter(is_late_arrival=True).count()
+    early_departures = attendances.filter(is_early_departure=True).count()
+    normal_count = attendances.filter(
+        is_outlier=False, 
+        is_late_arrival=False, 
+        is_early_departure=False
+    ).count()
     synced_count = attendances.filter(synced_to_crm=True).count()
     unsynced_count = total_records - synced_count
     
@@ -222,11 +240,14 @@ def attendance_report(request):
     context = {
         'selected_date': selected_date,
         'selected_device_id': device_id,
+        'search_query': search_query,
         'attendances': attendances,
         'devices': devices,
         'statistics': {
             'total_records': total_records,
             'outliers_count': outliers_count,
+            'late_arrivals': late_arrivals,
+            'early_departures': early_departures,
             'normal_count': normal_count,
             'synced_count': synced_count,
             'unsynced_count': unsynced_count,
@@ -327,6 +348,9 @@ def attendance_print(request):
     # Get device filter
     device_id = request.GET.get('device')
     
+    # Get search query
+    search_query = request.GET.get('search', '').strip()
+    
     # Query processed attendance for selected date
     attendances = ProcessedAttendance.objects.filter(date=selected_date)
     
@@ -338,6 +362,14 @@ def attendance_print(request):
             selected_device = Device.objects.get(id=device_id).name
         except Device.DoesNotExist:
             pass
+    
+    # Apply search filter if specified
+    if search_query:
+        from django.db.models import Q
+        attendances = attendances.filter(
+            Q(user_id__icontains=search_query) |
+            Q(user_id__in=DeviceUser.objects.filter(name__icontains=search_query).values_list('user_id', flat=True))
+        )
     
     # Order by user_id
     attendances = attendances.select_related('device').order_by('user_id')
@@ -523,6 +555,7 @@ def device_create(request):
             ip_address=request.POST.get('ip_address'),
             secondary_ip_address=request.POST.get('secondary_ip_address') or None,
             port=int(request.POST.get('port', 4370)),
+            timezone=request.POST.get('timezone', 'Africa/Nairobi'),
             enabled=request.POST.get('enabled') == 'on'
         )
         return HttpResponseRedirect(reverse('device_list'))
@@ -545,6 +578,7 @@ def device_edit(request, device_id):
         device.ip_address = request.POST.get('ip_address')
         device.secondary_ip_address = request.POST.get('secondary_ip_address') or None
         device.port = int(request.POST.get('port', 4370))
+        device.timezone = request.POST.get('timezone', 'Africa/Nairobi')
         device.enabled = request.POST.get('enabled') == 'on'
         device.save()
         return HttpResponseRedirect(reverse('device_list'))
@@ -723,3 +757,58 @@ def device_user_delete_from_db(request, device_id):
             })
     
     return JsonResponse({'success': False, 'error': 'Invalid request method'})
+
+
+@require_http_methods(["POST"])
+def reprocess_attendance(request):
+    """
+    Reprocess attendance records for a specific date range or single date.
+    This will recalculate late/early/outlier flags based on current settings.
+    """
+    import json
+    from .processing_utils import process_attendance_for_date
+    
+    try:
+        data = json.loads(request.body)
+        start_date_str = data.get('start_date')
+        end_date_str = data.get('end_date', start_date_str)
+        device_id = data.get('device_id')
+        
+        start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+        end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+        
+        if end_date < start_date:
+            return JsonResponse({'success': False, 'error': 'End date cannot be before start date'})
+        
+        date_diff = (end_date - start_date).days
+        if date_diff > 31:
+            return JsonResponse({'success': False, 'error': 'Date range cannot exceed 31 days'})
+        
+        device = None
+        if device_id:
+            device = Device.objects.get(id=device_id)
+        
+        processed_count = 0
+        current_date = start_date
+        
+        while current_date <= end_date:
+            if device:
+                user_ids = ProcessedAttendance.objects.filter(date=current_date, device=device).values_list('user_id', flat=True).distinct()
+            else:
+                user_ids = ProcessedAttendance.objects.filter(date=current_date).values_list('user_id', flat=True).distinct()
+            
+            for user_id in user_ids:
+                process_attendance_for_date(user_id, current_date, device)
+                processed_count += 1
+            
+            current_date += timedelta(days=1)
+        
+        return JsonResponse({'success': True, 'processed': processed_count, 'date_range': f"{start_date} to {end_date}"})
+        
+    except Device.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'Device not found'})
+    except ValueError as e:
+        return JsonResponse({'success': False, 'error': f'Invalid date format: {str(e)}'})
+    except Exception as e:
+        logger.error(f"Error reprocessing attendance: {str(e)}")
+        return JsonResponse({'success': False, 'error': str(e)})
