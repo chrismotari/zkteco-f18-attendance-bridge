@@ -1,0 +1,271 @@
+{% extends "core/base.html" %}
+{% load timezone_filters %}
+
+{% block title %}Outlier Punches Management{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>⚠️ Outlier Punches Management</h2>
+    <p style="margin-bottom: 1rem; color: #666;">
+        Outlier punches are punches that fall outside the acceptable shift window. Review and manage them here.
+    </p>
+    
+    <form method="get" class="filter-form">
+        <div>
+            <label for="date_from">From Date:</label>
+            <input type="date" id="date_from" name="date_from" value="{{ date_from }}">
+        </div>
+        
+        <div>
+            <label for="date_to">To Date:</label>
+            <input type="date" id="date_to" name="date_to" value="{{ date_to }}">
+        </div>
+        
+        <div>
+            <label for="device">Device:</label>
+            <select id="device" name="device">
+                <option value="">All Devices</option>
+                {% for device in devices %}
+                    <option value="{{ device.id }}" {% if selected_device == device.id|stringformat:"s" %}selected{% endif %}>
+                        {{ device.name }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+        
+        <div>
+            <label for="reviewed">Status:</label>
+            <select id="reviewed" name="reviewed">
+                <option value="">All</option>
+                <option value="false" {% if reviewed_filter == 'false' %}selected{% endif %}>Unreviewed</option>
+                <option value="true" {% if reviewed_filter == 'true' %}selected{% endif %}>Reviewed</option>
+            </select>
+        </div>
+        
+        <input type="text" id="search" name="search" value="{{ search_query }}" placeholder="🔍 Search by User ID or Name..." style="padding: 0.5rem 1rem; border: 1px solid #ddd; border-radius: 4px; width: 300px;">
+        
+        <button type="submit" class="btn btn-primary">Filter</button>
+        
+        <a href="{% url 'outliers_list' %}" class="btn btn-secondary">Clear Filters</a>
+    </form>
+</div>
+
+<!-- Statistics -->
+<div class="stats">
+    <div class="stat-box">
+        <div class="stat-label">Total Outliers</div>
+        <div class="stat-value">{{ total_outliers }}</div>
+    </div>
+    
+    <div class="stat-box" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+        <div class="stat-label">Unreviewed</div>
+        <div class="stat-value">{{ unreviewed_count }}</div>
+    </div>
+    
+    <div class="stat-box" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+        <div class="stat-label">Reviewed</div>
+        <div class="stat-value">{{ reviewed_count }}</div>
+    </div>
+</div>
+
+<!-- Outliers Table -->
+<div class="card">
+    <h3>Outlier Punches ({{ total_outliers }})</h3>
+    
+    {% if outliers %}
+    <div style="overflow-x: auto;">
+        <table>
+            <thead>
+                <tr>
+                    <th>User</th>
+                    <th>Device</th>
+                    <th>Punch Time</th>
+                    <th>Shift Date</th>
+                    <th>Reason</th>
+                    <th>Status</th>
+                    <th>Notes</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="outliersTable">
+                {% for outlier in outliers %}
+                <tr id="outlier-row-{{ outlier.id }}" {% if outlier.reviewed %}style="opacity: 0.6;"{% endif %}>
+                    <td>
+                        <strong>{{ outlier.user_name_display }}</strong><br>
+                        <small style="color: #666;">ID: {{ outlier.user_id }}</small>
+                    </td>
+                    <td>{{ outlier.device.name }}</td>
+                    <td>
+                        <strong>{{ outlier.punch_datetime|timezone:outlier.device.timezone|date:'Y-m-d' }}</strong><br>
+                        <span style="color: #e74c3c; font-weight: bold;">{{ outlier.punch_datetime|timezone:outlier.device.timezone|date:'H:i:s' }}</span>
+                    </td>
+                    <td>
+                        {% if outlier.associated_shift_date %}
+                            {{ outlier.associated_shift_date|date:'Y-m-d' }}
+                        {% else %}
+                            <span style="color: #999;">-</span>
+                        {% endif %}
+                    </td>
+                    <td style="max-width: 300px;">
+                        <small>{{ outlier.reason }}</small>
+                    </td>
+                    <td>
+                        {% if outlier.reviewed %}
+                            <span class="badge badge-reviewed">✓ Reviewed</span>
+                        {% else %}
+                            <span class="badge badge-unreviewed">⚠ Unreviewed</span>
+                        {% endif %}
+                    </td>
+                    <td style="max-width: 200px;">
+                        <small id="notes-{{ outlier.id }}">{{ outlier.notes|default:"-" }}</small>
+                    </td>
+                    <td>
+                        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                            {% if not outlier.reviewed %}
+                                <button class="btn-small btn-primary" onclick="markReviewed({{ outlier.id }})">✓ Mark Reviewed</button>
+                            {% else %}
+                                <button class="btn-small btn-secondary" onclick="markUnreviewed({{ outlier.id }})">↺ Unmark</button>
+                            {% endif %}
+                            <button class="btn-small btn-secondary" onclick="addNotes({{ outlier.id }})">📝 Notes</button>
+                            <button class="btn-small btn-danger" onclick="deleteOutlier({{ outlier.id }})">🗑️ Delete</button>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p style="text-align: center; padding: 2rem; color: #666;">No outlier punches found matching the criteria.</p>
+    {% endif %}
+</div>
+
+<script>
+function markReviewed(outlierId) {
+    if (!confirm('Mark this outlier punch as reviewed?')) return;
+    
+    fetch('/outliers/mark-reviewed/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: `outlier_id=${outlierId}&reviewed=true`
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Error: ' + (data.error || 'Unknown error'));
+        }
+    })
+    .catch(error => {
+        alert('Error marking outlier as reviewed: ' + error);
+    });
+}
+
+function markUnreviewed(outlierId) {
+    if (!confirm('Mark this outlier punch as unreviewed?')) return;
+    
+    fetch('/outliers/mark-reviewed/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: `outlier_id=${outlierId}&reviewed=false`
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Error: ' + (data.error || 'Unknown error'));
+        }
+    })
+    .catch(error => {
+        alert('Error unmarking outlier: ' + error);
+    });
+}
+
+function addNotes(outlierId) {
+    const currentNotes = document.getElementById(`notes-${outlierId}`).textContent;
+    const notes = prompt('Enter notes for this outlier punch:', currentNotes === '-' ? '' : currentNotes);
+    
+    if (notes === null) return; // User cancelled
+    
+    fetch('/outliers/mark-reviewed/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: `outlier_id=${outlierId}&reviewed=true&notes=${encodeURIComponent(notes)}`
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            document.getElementById(`notes-${outlierId}`).textContent = data.notes || '-';
+            alert('Notes saved successfully');
+        } else {
+            alert('Error: ' + (data.error || 'Unknown error'));
+        }
+    })
+    .catch(error => {
+        alert('Error saving notes: ' + error);
+    });
+}
+
+function deleteOutlier(outlierId) {
+    if (!confirm('Are you sure you want to delete this outlier punch? This action cannot be undone.')) return;
+    
+    fetch('/outliers/delete/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: `outlier_id=${outlierId}`
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            document.getElementById(`outlier-row-${outlierId}`).remove();
+            location.reload();
+        } else {
+            alert('Error: ' + (data.error || 'Unknown error'));
+        }
+    })
+    .catch(error => {
+        alert('Error deleting outlier: ' + error);
+    });
+}
+</script>
+
+<style>
+.badge-reviewed {
+    background: #27ae60;
+    color: white;
+}
+
+.badge-unreviewed {
+    background: #e74c3c;
+    color: white;
+}
+
+.btn-small {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.875rem;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.btn-danger {
+    background: #e74c3c;
+    color: white;
+}
+
+.btn-danger:hover {
+    background: #c0392b;
+}
+</style>
+{% endblock %}

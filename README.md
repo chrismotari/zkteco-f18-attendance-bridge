@@ -342,12 +342,41 @@ Records are flagged as outliers if:
 
 All configuration is in `.env` file. Key settings:
 
+### Attendance Processing
 - `POLLING_INTERVAL_MINUTES` - How often to poll devices
 - `WORK_START_TIME` / `WORK_END_TIME` - For outlier detection
+- `OVERNIGHT_SHIFT` - Enable overnight shift support (true/false)
+- `OVERNIGHT_SHIFT_BUFFER_HOURS` - Buffer hours for shift window
+
+### CRM Synchronization
 - `CRM_API_URL` - Remote CRM endpoint
 - `CRM_API_TOKEN` - Authentication token
 - `CRM_MAX_RETRIES` - Number of retry attempts
 - `CRM_SYNC_BATCH_SIZE` - Max records per sync batch
+
+### Email Notifications for Outliers
+- `OUTLIER_EMAIL_NOTIFICATIONS` - Enable email alerts for new outliers (true/false)
+- `OUTLIER_EMAIL_RECIPIENTS` - Comma-separated list of email addresses
+- `EMAIL_BACKEND` - Django email backend (default: console)
+- `EMAIL_HOST` - SMTP server hostname
+- `EMAIL_PORT` - SMTP server port
+- `EMAIL_USE_TLS` - Use TLS (true/false)
+- `EMAIL_HOST_USER` - SMTP username
+- `EMAIL_HOST_PASSWORD` - SMTP password
+- `DEFAULT_FROM_EMAIL` - Sender email address
+
+**Example .env for email notifications:**
+```env
+OUTLIER_EMAIL_NOTIFICATIONS=true
+OUTLIER_EMAIL_RECIPIENTS=manager@company.com,hr@company.com
+EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
+EMAIL_HOST=smtp.gmail.com
+EMAIL_PORT=587
+EMAIL_USE_TLS=true
+EMAIL_HOST_USER=your-email@gmail.com
+EMAIL_HOST_PASSWORD=your-app-password
+DEFAULT_FROM_EMAIL=attendance@company.com
+```
 
 ## Production Deployment
 

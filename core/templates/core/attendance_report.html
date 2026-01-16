@@ -36,6 +36,8 @@
         <a href="{% url 'attendance_print' %}?date={{ selected_date|date:'Y-m-d' }}{% if selected_device_id %}&device={{ selected_device_id }}{% endif %}{% if search_query %}&search={{ search_query }}{% endif %}" 
            target="_blank" class="btn btn-secondary">🖨️ Print Report</a>
         
+        <a href="{% url 'outliers_list' %}" class="btn btn-secondary">⚠️ View Outliers</a>
+        
         <div class="pagination" style="margin-left: auto;">
             <a href="?date={{ prev_date|date:'Y-m-d' }}{% if selected_device_id %}&device={{ selected_device_id }}{% endif %}{% if search_query %}&search={{ search_query }}{% endif %}" class="btn btn-secondary">← Previous</a>
             <a href="?date={{ next_date|date:'Y-m-d' }}{% if selected_device_id %}&device={{ selected_device_id }}{% endif %}{% if search_query %}&search={{ search_query }}{% endif %}" class="btn btn-secondary">Next →</a>
@@ -62,13 +64,19 @@
     </div>
     
     <div class="stat-box" style="background: #ffebee; border-left: 4px solid #f44336;">
-        <div class="stat-label">Early Departures</div>
+        <div class="stat-label">Left Early</div>
         <div class="stat-value" style="color: #f44336;">{{ statistics.early_departures }}</div>
     </div>
     
-    <div class="stat-box warning">
-        <div class="stat-label">Outliers</div>
+    <div class="stat-box" style="background: #e3f2fd; border-left: 4px solid #2196f3;">
+        <div class="stat-label">Incomplete</div>
+        <div class="stat-value" style="color: #2196f3;">{{ statistics.incomplete_count }}</div>
+    </div>
+    
+    <div class="stat-box warning" style="cursor: pointer;" onclick="window.location.href='{% url 'outliers_list' %}'">
+        <div class="stat-label">Outliers (Separate Table)</div>
         <div class="stat-value">{{ statistics.outliers_count }}</div>
+        <small style="opacity: 0.8;">Click to view →</small>
     </div>
     
     <div class="stat-box {% if statistics.unsynced_count > 0 %}danger{% else %}success{% endif %}">
@@ -101,7 +109,7 @@
             {% for attendance in attendances %}
             <tr>
                 <td><strong>{{ attendance.user_id }}</strong></td>
-                <td>{{ attendance.user_name }}</td>
+                <td>{{ attendance.user_name_display }}</td>
                 <td>{{ attendance.device.name }}</td>
                 <td>
                     {% if attendance.clock_in %}
@@ -125,16 +133,19 @@
                     {% endif %}
                 </td>
                 <td>
+                    {% if attendance.is_incomplete %}
+                        <span class="badge" style="background: #2196f3; color: white;">📋 Incomplete</span>
+                    {% endif %}
                     {% if attendance.is_late_arrival %}
                         <span class="badge" style="background: #ff9800; color: white;">⏰ Late Arrival</span>
                     {% endif %}
                     {% if attendance.is_early_departure %}
-                        <span class="badge" style="background: #f44336; color: white;">⏱️ Early Departure</span>
+                        <span class="badge" style="background: #f44336; color: white;">⏱️ Left Early</span>
                     {% endif %}
                     {% if attendance.is_outlier %}
                         <span class="badge" style="background: #ffc107; color: #333;">⚠️ Outlier</span>
                     {% endif %}
-                    {% if not attendance.is_late_arrival and not attendance.is_early_departure and not attendance.is_outlier %}
+                    {% if not attendance.is_incomplete and not attendance.is_late_arrival and not attendance.is_early_departure and not attendance.is_outlier %}
                         <span class="badge badge-success">✓ Normal</span>
                     {% endif %}
                 </td>

@@ -70,3 +70,32 @@ def format_time(value):
         return ''
     
     return local_time.strftime('%H:%M:%S')
+
+
+@register.filter
+def timezone(value, tz_name):
+    """
+    Convert a datetime to a specific timezone.
+    Usage: {{ timestamp|timezone:"Africa/Nairobi" }}
+    """
+    if not value:
+        return ''
+    
+    if not isinstance(value, datetime):
+        return value
+    
+    try:
+        target_tz = pytz.timezone(tz_name)
+    except pytz.UnknownTimeZoneError:
+        return value
+    
+    # If the datetime is naive, assume it's UTC
+    if value.tzinfo is None:
+        utc_time = pytz.utc.localize(value)
+    else:
+        utc_time = value
+    
+    # Convert to target timezone
+    local_time = utc_time.astimezone(target_tz)
+    
+    return local_time

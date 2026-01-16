@@ -119,34 +119,51 @@ class RawAttendance(models.Model):
 
 class ProcessedAttendance(models.Model):
     """
-    Stores processed attendance records with clock-in and clock-out times.
+    Stores processed attendance records for shifts with punches WITHIN the shift window.
     
-    This model represents the daily attendance summary for each user,
-    containing the first punch (clock-in) and last punch (clock-out) of the day.
+    Only contains punches that fall within the acceptable shift timeframe.
+    Outlier punches (outside shift window) are stored separately in OutlierPunch.
     
-    Attributes:
-        device: Foreign key to Device
-        user_id: User/Employee ID
-        date: Date of attendance (date only, no time)
-        clock_in: Earliest punch timestamp for the day
-        clock_out: Latest punch timestamp for the day
-        is_outlier: Flag indicating if punches are outside normal work hours
-        outlier_reason: Description of why it's flagged as outlier
-        synced_to_crm: Whether this record has been synced to CRM
-        sync_attempts: Number of sync attempts
-        last_sync_attempt: Timestamp of last sync attempt
-        created_at: Record creation timestamp
-        updated_at: Record update timestamp
+    NEW FIELDS (Core Engine):
+        shift_date: Date this shift belongs to (shift start date)
+        shift_start_time: Expected shift start time (e.g., 20:00)
+        shift_end_time: Expected shift end time (e.g., 05:00)
+        earliest_punch: First punch within acceptable shift window
+        latest_punch: Last punch within acceptable shift window
+        punch_count: Number of punches within shift window
+        
+    LEGACY FIELDS (for backward compatibility during migration):
+        date: Use shift_date instead
+        clock_in: Use earliest_punch instead
+        clock_out: Use latest_punch instead
+        is_outlier: Outliers now in OutlierPunch table
+        outlier_reason: Moved to OutlierPunch
     """
     device = models.ForeignKey(Device, on_delete=models.CASCADE, related_name='processed_attendances')
     user_id = models.CharField(max_length=50, db_index=True, help_text="User/Employee ID")
-    date = models.DateField(db_index=True, help_text="Attendance date")
-    clock_in = models.DateTimeField(null=True, blank=True, help_text="Clock-in timestamp (earliest punch)")
-    clock_out = models.DateTimeField(null=True, blank=True, help_text="Clock-out timestamp (latest punch)")
-    is_outlier = models.BooleanField(default=False, help_text="Flagged as outlier (unclassifiable punch outside shift window)")
+    
+    # NEW CORE FIELDS
+    shift_date = models.DateField(db_index=True, null=True, blank=True, help_text="Shift date (when shift starts)")
+    shift_start_time = models.TimeField(null=True, blank=True, help_text="Expected shift start time")
+    shift_end_time = models.TimeField(null=True, blank=True, help_text="Expected shift end time")
+    earliest_punch = models.DateTimeField(null=True, blank=True, help_text="First punch within shift window")
+    latest_punch = models.DateTimeField(null=True, blank=True, help_text="Last punch within shift window")
+    punch_count = models.IntegerField(default=0, help_text="Number of punches within shift window")
+    
+    # FLAGS
     is_late_arrival = models.BooleanField(default=False, help_text="Punched in late")
     is_early_departure = models.BooleanField(default=False, help_text="Punched out early")
-    outlier_reason = models.TextField(blank=True, help_text="Reason for outlier/late/early flags")
+    is_incomplete = models.BooleanField(default=False, help_text="Missing punch within shift window")
+    notes = models.TextField(blank=True, help_text="Additional notes")
+    
+    # LEGACY FIELDS (keep for backward compatibility)
+    date = models.DateField(db_index=True, null=True, blank=True, help_text="LEGACY: use shift_date")
+    clock_in = models.DateTimeField(null=True, blank=True, help_text="LEGACY: use earliest_punch")
+    clock_out = models.DateTimeField(null=True, blank=True, help_text="LEGACY: use latest_punch")
+    is_outlier = models.BooleanField(default=False, help_text="LEGACY: outliers now in OutlierPunch table")
+    outlier_reason = models.TextField(blank=True, help_text="LEGACY: moved to OutlierPunch")
+    
+    # CRM SYNC
     synced_to_crm = models.BooleanField(default=False, help_text="Synced to CRM")
     sync_attempts = models.IntegerField(default=0, help_text="Number of sync attempts")
     last_sync_attempt = models.DateTimeField(null=True, blank=True, help_text="Last sync attempt timestamp")
@@ -154,19 +171,22 @@ class ProcessedAttendance(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ['-date', 'user_id']
+        ordering = ['-shift_date', 'user_id']
         verbose_name = 'Processed Attendance'
         verbose_name_plural = 'Processed Attendances'
-        # One processed record per user per day per device
-        unique_together = ['device', 'user_id', 'date']
+        # One processed record per user per shift per device
+        unique_together = ['device', 'user_id', 'shift_date']
         indexes = [
+            models.Index(fields=['user_id', 'shift_date']),
+            models.Index(fields=['shift_date', 'synced_to_crm']),
+            models.Index(fields=['synced_to_crm', 'sync_attempts']),
+            # Legacy indexes
             models.Index(fields=['user_id', 'date']),
             models.Index(fields=['date', 'synced_to_crm']),
-            models.Index(fields=['synced_to_crm', 'sync_attempts']),
         ]
 
     def __str__(self):
-        return f"{self.user_id} on {self.date} (Device: {self.device.name})"
+        return f"{self.user_id} on {self.shift_date or self.date} (Device: {self.device.name})"
 
     @property
     def user_name(self):
@@ -179,9 +199,12 @@ class ProcessedAttendance(models.Model):
 
     @property
     def hours_worked(self):
-        """Calculate hours worked based on clock-in and clock-out times."""
-        if self.clock_in and self.clock_out:
-            delta = self.clock_out - self.clock_in
+        """Calculate hours worked based on earliest and latest punches."""
+        punch_in = self.earliest_punch or self.clock_in
+        punch_out = self.latest_punch or self.clock_out
+        
+        if punch_in and punch_out:
+            delta = punch_out - punch_in
             return round(delta.total_seconds() / 3600, 2)
         return None
 
@@ -196,3 +219,53 @@ class ProcessedAttendance(models.Model):
         self.sync_attempts += 1
         self.last_sync_attempt = timezone.now()
         self.save(update_fields=['sync_attempts', 'last_sync_attempt', 'updated_at'])
+
+
+class OutlierPunch(models.Model):
+    """
+    Stores individual punch records that fall outside the acceptable shift window.
+    
+    Each outlier punch gets its own record. These are punches that cannot be 
+    classified as part of a normal shift (e.g., punching at 2pm when shift is 8pm-5am).
+    
+    Attributes:
+        device: Foreign key to Device
+        user_id: User/Employee ID
+        punch_datetime: The actual timestamp of the outlier punch
+        reason: Why this punch is considered an outlier
+        associated_shift_date: The shift date this might belong to (nullable)
+        reviewed: Whether this outlier has been reviewed by admin
+        notes: Admin notes about this outlier
+        created_at: Record creation timestamp
+    """
+    device = models.ForeignKey(Device, on_delete=models.CASCADE, related_name='outlier_punches')
+    user_id = models.CharField(max_length=50, db_index=True, help_text="User/Employee ID")
+    punch_datetime = models.DateTimeField(db_index=True, help_text="Actual punch timestamp")
+    reason = models.TextField(help_text="Why this is an outlier")
+    associated_shift_date = models.DateField(null=True, blank=True, help_text="Potential shift date")
+    reviewed = models.BooleanField(default=False, help_text="Has been reviewed by admin")
+    notes = models.TextField(blank=True, help_text="Admin notes")
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-punch_datetime']
+        verbose_name = 'Outlier Punch'
+        verbose_name_plural = 'Outlier Punches'
+        unique_together = ['device', 'user_id', 'punch_datetime']
+        indexes = [
+            models.Index(fields=['user_id', 'punch_datetime']),
+            models.Index(fields=['punch_datetime', 'reviewed']),
+            models.Index(fields=['associated_shift_date']),
+        ]
+    
+    def __str__(self):
+        return f"{self.user_id} @ {self.punch_datetime} (Outlier)"
+    
+    @property
+    def user_name(self):
+        """Get the user's name from the DeviceUser model."""
+        try:
+            user = DeviceUser.objects.get(user_id=self.user_id)
+            return user.name
+        except DeviceUser.DoesNotExist:
+            return self.user_id

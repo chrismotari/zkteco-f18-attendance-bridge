@@ -55,6 +55,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'core.context_processors.outlier_count',
             ],
         },
     },
@@ -195,3 +196,17 @@ CRM_API_TOKEN = os.getenv('CRM_API_TOKEN', '')
 CRM_SYNC_BATCH_SIZE = int(os.getenv('CRM_SYNC_BATCH_SIZE', '100'))
 CRM_REQUEST_TIMEOUT = int(os.getenv('CRM_REQUEST_TIMEOUT', '30'))
 CRM_MAX_RETRIES = int(os.getenv('CRM_MAX_RETRIES', '3'))
+
+# Email Configuration for Outlier Notifications
+OUTLIER_EMAIL_NOTIFICATIONS = os.getenv('OUTLIER_EMAIL_NOTIFICATIONS', 'False').lower() == 'true'
+OUTLIER_EMAIL_RECIPIENTS = [email.strip() for email in os.getenv('OUTLIER_EMAIL_RECIPIENTS', '').split(',') if email.strip()]
+
+# Email Backend Configuration
+EMAIL_BACKEND = os.getenv('EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend')
+EMAIL_HOST = os.getenv('EMAIL_HOST', 'localhost')
+EMAIL_PORT = int(os.getenv('EMAIL_PORT', '25'))
+EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'False').lower() == 'true'
+EMAIL_USE_SSL = os.getenv('EMAIL_USE_SSL', 'False').lower() == 'true'
+EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
+DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'noreply@attendance-bridge.local')

@@ -178,6 +178,9 @@ def attendance_report(request):
     Display attendance report for a specific date.
     Allows filtering by date and device.
     """
+    from django.db.models import Subquery, OuterRef, CharField, Value, Q
+    from django.db.models.functions import Coalesce
+    
     # Get date from request (default to today)
     selected_date_str = request.GET.get('date')
     if selected_date_str:
@@ -194,8 +197,22 @@ def attendance_report(request):
     # Get search query
     search_query = request.GET.get('search', '').strip()
     
-    # Query processed attendance for selected date
-    attendances = ProcessedAttendance.objects.filter(date=selected_date)
+    # Subquery to get user name from DeviceUser table (efficient - single query)
+    user_name_subquery = DeviceUser.objects.filter(
+        user_id=OuterRef('user_id')
+    ).values('name')[:1]
+    
+    # Query processed attendance for selected date with annotated user_name
+    # Use shift_date (new field) with fallback to date (legacy) for backward compatibility
+    attendances = ProcessedAttendance.objects.filter(
+        Q(shift_date=selected_date) | Q(date=selected_date, shift_date__isnull=True)
+    ).annotate(
+        user_name_display=Coalesce(
+            Subquery(user_name_subquery, output_field=CharField()),
+            'user_id',  # Fallback to user_id if no DeviceUser found
+            output_field=CharField()
+        )
+    )
     
     # Apply device filter if specified
     if device_id:
@@ -203,7 +220,6 @@ def attendance_report(request):
     
     # Apply search filter if specified
     if search_query:
-        from django.db.models import Q
         # Search in user_id or user_name (via DeviceUser)
         attendances = attendances.filter(
             Q(user_id__icontains=search_query) |
@@ -221,10 +237,12 @@ def attendance_report(request):
     outliers_count = attendances.filter(is_outlier=True).count()
     late_arrivals = attendances.filter(is_late_arrival=True).count()
     early_departures = attendances.filter(is_early_departure=True).count()
+    incomplete_count = attendances.filter(is_incomplete=True).count()
     normal_count = attendances.filter(
         is_outlier=False, 
         is_late_arrival=False, 
-        is_early_departure=False
+        is_early_departure=False,
+        is_incomplete=False
     ).count()
     synced_count = attendances.filter(synced_to_crm=True).count()
     unsynced_count = total_records - synced_count
@@ -248,6 +266,7 @@ def attendance_report(request):
             'outliers_count': outliers_count,
             'late_arrivals': late_arrivals,
             'early_departures': early_departures,
+            'incomplete_count': incomplete_count,
             'normal_count': normal_count,
             'synced_count': synced_count,
             'unsynced_count': unsynced_count,
@@ -285,10 +304,10 @@ def delete_attendance(request):
 
     # Identify raw timestamps to delete
     to_delete = []
-    if delete_which in ('in', 'both') and processed.clock_in:
-        to_delete.append(processed.clock_in)
-    if delete_which in ('out', 'both') and processed.clock_out:
-        to_delete.append(processed.clock_out)
+    if delete_which in ('in', 'both') and processed.earliest_punch:
+        to_delete.append(processed.earliest_punch)
+    if delete_which in ('out', 'both') and processed.latest_punch:
+        to_delete.append(processed.latest_punch)
 
     deleted_count = 0
     for ts in to_delete:
@@ -304,10 +323,11 @@ def delete_attendance(request):
     # user/device/date. If none remain, delete the processed record as well
     # (the processed summary no longer has backing raw data). Otherwise,
     # re-run processing for the date so the processed record is updated.
+    shift_date = processed.shift_date or processed.date  # Support both new and legacy fields
     remaining = RawAttendance.objects.filter(
         device=processed.device,
         user_id=processed.user_id,
-        timestamp__date=processed.date
+        timestamp__date=shift_date
     ).exists()
 
     processed_deleted = False
@@ -323,7 +343,7 @@ def delete_attendance(request):
         # There are still raw rows for this user/date; re-process so the
         # processed record reflects the deletion.
         try:
-            process_attendance_for_date(processed.user_id, processed.date, device=processed.device)
+            process_attendance_for_date(processed.user_id, shift_date, device=processed.device)
         except Exception as e:
             # Processing failure is not fatal for deletion, but report it
             return JsonResponse({'deleted': deleted_count, 'processing_error': str(e)})
@@ -335,6 +355,9 @@ def attendance_print(request):
     """
     Print-friendly version of attendance report.
     """
+    from django.db.models import Subquery, OuterRef, CharField
+    from django.db.models.functions import Coalesce
+    
     # Get date from request (default to today)
     selected_date_str = request.GET.get('date')
     if selected_date_str:
@@ -351,8 +374,23 @@ def attendance_print(request):
     # Get search query
     search_query = request.GET.get('search', '').strip()
     
-    # Query processed attendance for selected date
-    attendances = ProcessedAttendance.objects.filter(date=selected_date)
+    # Subquery to get user name from DeviceUser table (efficient - single query)
+    user_name_subquery = DeviceUser.objects.filter(
+        user_id=OuterRef('user_id')
+    ).values('name')[:1]
+    
+    # Query processed attendance for selected date with annotated user_name
+    # Use shift_date (new field) with fallback to date (legacy) for backward compatibility
+    from django.db.models import Q
+    attendances = ProcessedAttendance.objects.filter(
+        Q(shift_date=selected_date) | Q(date=selected_date, shift_date__isnull=True)
+    ).annotate(
+        user_name_display=Coalesce(
+            Subquery(user_name_subquery, output_field=CharField()),
+            'user_id',  # Fallback to user_id if no DeviceUser found
+            output_field=CharField()
+        )
+    )
     
     # Apply device filter if specified
     selected_device = None
@@ -812,3 +850,151 @@ def reprocess_attendance(request):
     except Exception as e:
         logger.error(f"Error reprocessing attendance: {str(e)}")
         return JsonResponse({'success': False, 'error': str(e)})
+
+
+def outliers_list(request):
+    """
+    Display all outlier punches with filtering and review capabilities.
+    
+    Outlier punches are punches that fall outside the acceptable shift window.
+    This view allows reviewing, marking as reviewed, and deleting outliers.
+    """
+    from .models import OutlierPunch
+    from django.db.models import Subquery, OuterRef, CharField, Q
+    from django.db.models.functions import Coalesce
+    from datetime import datetime
+    
+    # Get filters from request
+    device_id = request.GET.get('device')
+    reviewed_filter = request.GET.get('reviewed')  # 'true', 'false', or None (all)
+    date_from = request.GET.get('date_from')
+    date_to = request.GET.get('date_to')
+    search_query = request.GET.get('search', '').strip()
+    
+    # Subquery to get user name from DeviceUser table
+    user_name_subquery = DeviceUser.objects.filter(
+        user_id=OuterRef('user_id')
+    ).values('name')[:1]
+    
+    # Base query with user name annotation
+    outliers = OutlierPunch.objects.annotate(
+        user_name_display=Coalesce(
+            Subquery(user_name_subquery, output_field=CharField()),
+            'user_id',
+            output_field=CharField()
+        )
+    )
+    
+    # Apply filters
+    if device_id:
+        outliers = outliers.filter(device_id=device_id)
+    
+    if reviewed_filter == 'true':
+        outliers = outliers.filter(reviewed=True)
+    elif reviewed_filter == 'false':
+        outliers = outliers.filter(reviewed=False)
+    
+    if date_from:
+        try:
+            date_from_obj = datetime.strptime(date_from, '%Y-%m-%d').date()
+            outliers = outliers.filter(punch_datetime__date__gte=date_from_obj)
+        except ValueError:
+            pass
+    
+    if date_to:
+        try:
+            date_to_obj = datetime.strptime(date_to, '%Y-%m-%d').date()
+            outliers = outliers.filter(punch_datetime__date__lte=date_to_obj)
+        except ValueError:
+            pass
+    
+    if search_query:
+        outliers = outliers.filter(
+            Q(user_id__icontains=search_query) |
+            Q(reason__icontains=search_query) |
+            Q(user_id__in=DeviceUser.objects.filter(name__icontains=search_query).values_list('user_id', flat=True))
+        )
+    
+    # Order by punch_datetime descending (most recent first)
+    outliers = outliers.select_related('device').order_by('-punch_datetime')
+    
+    # Get all devices for filter dropdown
+    devices = Device.objects.all()
+    
+    # Calculate statistics
+    total_outliers = outliers.count()
+    reviewed_count = outliers.filter(reviewed=True).count()
+    unreviewed_count = total_outliers - reviewed_count
+    
+    context = {
+        'outliers': outliers,
+        'devices': devices,
+        'total_outliers': total_outliers,
+        'reviewed_count': reviewed_count,
+        'unreviewed_count': unreviewed_count,
+        'selected_device': device_id,
+        'reviewed_filter': reviewed_filter,
+        'date_from': date_from,
+        'date_to': date_to,
+        'search_query': search_query,
+        'today': timezone.now().date(),
+    }
+    
+    return render(request, 'core/outliers_list.html', context)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def outlier_mark_reviewed(request):
+    """Mark an outlier punch as reviewed."""
+    from .models import OutlierPunch
+    
+    outlier_id = request.POST.get('outlier_id')
+    reviewed = request.POST.get('reviewed', 'true').lower() == 'true'
+    notes = request.POST.get('notes', '')
+    
+    if not outlier_id:
+        return JsonResponse({'error': 'outlier_id is required'}, status=400)
+    
+    try:
+        outlier = OutlierPunch.objects.get(id=outlier_id)
+        outlier.reviewed = reviewed
+        if notes:
+            outlier.notes = notes
+        outlier.save()
+        
+        return JsonResponse({
+            'success': True,
+            'outlier_id': outlier_id,
+            'reviewed': reviewed,
+            'notes': outlier.notes
+        })
+    except OutlierPunch.DoesNotExist:
+        return JsonResponse({'error': 'Outlier punch not found'}, status=404)
+    except Exception as e:
+        logger.error(f"Error marking outlier as reviewed: {str(e)}")
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def outlier_delete(request):
+    """Delete an outlier punch record."""
+    from .models import OutlierPunch
+    
+    outlier_id = request.POST.get('outlier_id')
+    
+    if not outlier_id:
+        return JsonResponse({'error': 'outlier_id is required'}, status=400)
+    
+    try:
+        outlier = OutlierPunch.objects.get(id=outlier_id)
+        outlier.delete()
+        
+        return JsonResponse({'success': True, 'outlier_id': outlier_id})
+    except OutlierPunch.DoesNotExist:
+        return JsonResponse({'error': 'Outlier punch not found'}, status=404)
+    except Exception as e:
+        logger.error(f"Error deleting outlier: {str(e)}")
+        return JsonResponse({'error': str(e)}, status=500)
+

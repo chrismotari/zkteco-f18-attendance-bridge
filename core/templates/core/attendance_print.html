@@ -179,32 +179,27 @@
     <table>
         <thead>
             <tr>
-                <th style="width: 8%;">User ID</th>
-                <th style="width: 15%;">Name</th>
-                <th style="width: 10%;">Device</th>
-                <th style="width: 15%;">Clock In</th>
-                <th style="width: 15%;">Clock Out</th>
-                <th style="width: 8%;">Hours</th>
-                <th style="width: 8%;">Status</th>
-                <th style="width: 21%;">Notes</th>
+                <th style="width: 25%;">Name</th>
+                <th style="width: 20%;">Clock In</th>
+                <th style="width: 20%;">Clock Out</th>
+                <th style="width: 15%;">Hours</th>
+                <th style="width: 20%;">Status</th>
             </tr>
         </thead>
         <tbody>
             {% for attendance in attendances %}
             <tr>
-                <td><strong>{{ attendance.user_id }}</strong></td>
-                <td>{{ attendance.user_name }}</td>
-                <td>{{ attendance.device.name }}</td>
+                <td><strong>{{ attendance.user_name_display }}</strong></td>
                 <td>
-                    {% if attendance.clock_in %}
-                        {{ attendance.clock_in|format_datetime }}
+                    {% if attendance.earliest_punch or attendance.clock_in %}
+                        {{ attendance.earliest_punch|default:attendance.clock_in|format_time }}
                     {% else %}
                         -
                     {% endif %}
                 </td>
                 <td>
-                    {% if attendance.clock_out %}
-                        {{ attendance.clock_out|format_datetime }}
+                    {% if attendance.latest_punch or attendance.clock_out %}
+                        {{ attendance.latest_punch|default:attendance.clock_out|format_time }}
                     {% else %}
                         -
                     {% endif %}
@@ -217,24 +212,14 @@
                     {% endif %}
                 </td>
                 <td>
-                    {% if attendance.is_late_arrival %}
-                        <span class="badge" style="background: #ff9800; color: white; padding: 2px 6px; border-radius: 3px; font-size: 9pt;">⏰ Late</span>
-                    {% endif %}
-                    {% if attendance.is_early_departure %}
-                        <span class="badge" style="background: #f44336; color: white; padding: 2px 6px; border-radius: 3px; font-size: 9pt;">⏱️ Early</span>
-                    {% endif %}
-                    {% if attendance.is_outlier %}
-                        <span class="badge" style="background: #ffc107; color: #333; padding: 2px 6px; border-radius: 3px; font-size: 9pt;">⚠️ Outlier</span>
-                    {% endif %}
-                    {% if not attendance.is_late_arrival and not attendance.is_early_departure and not attendance.is_outlier %}
-                        <span class="badge badge-success">✓ Normal</span>
-                    {% endif %}
-                </td>
-                <td>
-                    {% if attendance.outlier_reason %}
-                        {{ attendance.outlier_reason }}
+                    {% if attendance.is_incomplete %}
+                        <span class="badge" style="background: #2196f3; color: white; padding: 2px 6px; border-radius: 3px; font-size: 9pt;">Incomplete</span>
+                    {% elif attendance.is_late_arrival %}
+                        <span class="badge" style="background: #ff9800; color: white; padding: 2px 6px; border-radius: 3px; font-size: 9pt;">Late</span>
+                    {% elif attendance.is_early_departure %}
+                        <span class="badge" style="background: #f44336; color: white; padding: 2px 6px; border-radius: 3px; font-size: 9pt;">Left Early</span>
                     {% else %}
-                        -
+                        <span class="badge badge-success">Normal</span>
                     {% endif %}
                 </td>
             </tr>
