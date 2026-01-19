@@ -308,37 +308,37 @@
         }
     }
     
-    function syncUsers() {
+    async function syncUsers() {
         const btn = event.target;
         const originalText = btn.innerHTML;
         btn.innerHTML = '⏳ Syncing...';
         btn.disabled = true;
         
-        fetch('{% url "device_user_sync" device.id %}', {
-            method: 'POST',
-            headers: {
-                'X-CSRFToken': '{{ csrf_token }}'
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
+        try {
+            const response = await fetch('{% url "device_user_sync" device.id %}', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': '{{ csrf_token }}'
+                }
+            });
+            
+            const data = await parseJsonResponse(response);
+            
             if (data.success) {
                 alert(`✅ Sync successful!\n\nTotal: ${data.total} users\nCreated: ${data.created}\nUpdated: ${data.updated}`);
                 location.reload();
             } else {
                 alert(`❌ Sync failed!\n\nError: ${data.error}`);
             }
-        })
-        .catch(error => {
-            alert(`❌ Error: ${error}`);
-        })
-        .finally(() => {
+        } catch (error) {
+            alert(`❌ Error: ${error.message}`);
+        } finally {
             btn.innerHTML = originalText;
             btn.disabled = false;
         });
     }
     
-    function deleteSelected() {
+    async function deleteSelected() {
         const checkboxes = document.querySelectorAll('.user-checkbox:checked');
         const userIds = Array.from(checkboxes).map(cb => cb.value);
         
@@ -356,33 +356,34 @@
         btn.innerHTML = '⏳ Deleting...';
         btn.disabled = true;
         
-        fetch('{% url "device_user_delete" device.id %}', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': '{{ csrf_token }}'
-            },
-            body: JSON.stringify({ user_ids: userIds })
-        })
-        .then(response => response.json())
-        .then(data => {
+        try {
+            const response = await fetch('{% url "device_user_delete" device.id %}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                },
+                body: JSON.stringify({ user_ids: userIds })
+            });
+            
+            const data = await parseJsonResponse(response);
+            
             if (data.success) {
                 alert(`✅ Deletion complete!\n\nDeleted: ${data.deleted}\nFailed: ${data.failed}`);
                 location.reload();
             } else {
                 alert(`❌ Deletion failed!\n\nError: ${data.error}`);
             }
-        })
-        .catch(error => {
-            alert(`❌ Error: ${error}`);
-        })
+        } catch (error) {
+            alert(`❌ Error: ${error.message}`);
+        } finally {
         .finally(() => {
             btn.innerHTML = originalText;
             btn.disabled = false;
         });
     }
     
-    function deleteMissingUsers() {
+    async function deleteMissingUsers() {
         if (!confirm('⚠️ WARNING: This will delete {{ missing_count }} user(s) from the database!\n\nThese users are not on the device anymore. Deleting them will:\n- Remove them from the database\n- Keep their attendance history intact\n\nContinue?')) {
             return;
         }
@@ -394,27 +395,27 @@
         
         const userIds = {{ missing_user_ids|safe }};
         
-        fetch('{% url "device_user_delete_from_db" device.id %}', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': '{{ csrf_token }}'
-            },
-            body: JSON.stringify({ user_ids: userIds })
-        })
-        .then(response => response.json())
-        .then(data => {
+        try {
+            const response = await fetch('{% url "device_user_delete_from_db" device.id %}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                },
+                body: JSON.stringify({ user_ids: userIds })
+            });
+            
+            const data = await parseJsonResponse(response);
+            
             if (data.success) {
                 alert(`✅ Deleted ${data.deleted} user(s) from database`);
                 location.reload();
             } else {
                 alert(`❌ Deletion failed!\n\nError: ${data.error}`);
             }
-        })
-        .catch(error => {
-            alert(`❌ Error: ${error}`);
-        })
-        .finally(() => {
+        } catch (error) {
+            alert(`❌ Error: ${error.message}`);
+        } finally {
             btn.innerHTML = originalText;
             btn.disabled = false;
         });

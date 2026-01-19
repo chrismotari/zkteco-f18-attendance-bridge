@@ -169,7 +169,7 @@ function getCookie(name) {
     return cookieValue;
 }
 
-function deleteProcessed(processedId) {
+async function deleteProcessed(processedId) {
     if (!confirm('Delete this attendance (will remove the underlying raw punch(s) from the bridge DB)? This CANNOT delete single records on the device.')) {
         return;
     }
@@ -179,23 +179,26 @@ function deleteProcessed(processedId) {
 
     const csrfToken = getCookie('csrftoken');
 
-    fetch('{% url "delete_attendance" %}', {
-        method: 'POST',
-        headers: {
-            'X-CSRFToken': csrfToken
-        },
-        body: formData
-    })
-    .then(res => res.json())
-    .then(data => {
+    try {
+        const response = await fetch('{% url "delete_attendance" %}', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': csrfToken
+            },
+            body: formData
+        });
+        
+        const data = await parseJsonResponse(response);
+        
         if (data.error) {
             alert('Error: ' + data.error);
         } else {
             alert('Deleted ' + data.deleted + ' raw record(s).');
             location.reload();
         }
-    })
-    .catch(err => alert('Error: ' + err.message));
+    } catch (err) {
+        alert('Error: ' + err.message);
+    }
 }
 </script>
 {% endblock %}

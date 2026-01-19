@@ -192,7 +192,7 @@
     });
     
     // Sync day function
-    function syncDay() {
+    async function syncDay() {
         const date = document.getElementById('date').value;
         const deviceId = document.getElementById('device').value;
         const syncBtn = event.target;
@@ -218,15 +218,17 @@
                          getCookie('csrftoken');
         
         // Send sync request
-        fetch('/sync-day/', {
-            method: 'POST',
-            headers: {
-                'X-CSRFToken': csrfToken,
-            },
-            body: formData
-        })
-        .then(response => response.json())
-        .then(data => {
+        try {
+            const response = await fetch('/sync-day/', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrfToken,
+                },
+                body: formData
+            });
+            
+            const data = await parseJsonResponse(response);
+            
             syncBtn.disabled = false;
             syncBtn.textContent = '🔄 Sync This Day';
             
@@ -256,16 +258,15 @@
                 // Reload the page to show updated data
                 location.reload();
             }
-        })
-        .catch(error => {
+        } catch (error) {
             syncBtn.disabled = false;
             syncBtn.textContent = '🔄 Sync This Day';
             alert('Error syncing: ' + error.message);
-        });
+        }
     }
     
     // Reprocess day function
-    function reprocessDay() {
+    async function reprocessDay() {
         const date = document.getElementById('date').value;
         const deviceId = document.getElementById('device').value;
         const btn = event.target;
@@ -284,20 +285,22 @@
         
         const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || getCookie('csrftoken');
         
-        fetch('/attendance/reprocess/', {
-            method: 'POST',
-            headers: {
-                'X-CSRFToken': csrfToken,
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                start_date: date,
-                end_date: date,
-                device_id: deviceId || null
-            })
-        })
-        .then(response => response.json())
-        .then(data => {
+        try {
+            const response = await fetch('/attendance/reprocess/', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrfToken,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    start_date: date,
+                    end_date: date,
+                    device_id: deviceId || null
+                })
+            });
+            
+            const data = await parseJsonResponse(response);
+            
             btn.disabled = false;
             btn.textContent = '🔁 Recalculate Flags';
             
@@ -307,12 +310,11 @@
             } else {
                 alert('Error: ' + data.error);
             }
-        })
-        .catch(error => {
+        } catch (error) {
             btn.disabled = false;
             btn.textContent = '🔁 Recalculate Flags';
             alert('Error reprocessing: ' + error.message);
-        });
+        }
     }
     
     // Helper function to get CSRF cookie
@@ -327,37 +329,40 @@
                     break;
                 }
             }
-                function deleteProcessed(processedId) {
-                    if (!confirm('Delete this attendance (will remove the underlying raw punch(s) from the bridge DB)? This CANNOT delete single records on the device.')) {
-                        return;
-                    }
-
-                    const formData = new FormData();
-                    formData.append('processed_id', processedId);
-
-                    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || getCookie('csrftoken');
-
-                    fetch('{% url "delete_attendance" %}', {
-                        method: 'POST',
-                        headers: {
-                            'X-CSRFToken': csrfToken
-                        },
-                        body: formData
-                    })
-                    .then(res => res.json())
-                    .then(data => {
-                        if (data.error) {
-                            alert('Error: ' + data.error);
-                        } else {
-                            alert('Deleted ' + data.deleted + ' raw record(s).');
-                            location.reload();
-                        }
-                    })
-                    .catch(err => alert('Error: ' + err.message));
-                }
-
         }
         return cookieValue;
+    }
+    
+    async function deleteProcessed(processedId) {
+        if (!confirm('Delete this attendance (will remove the underlying raw punch(s) from the bridge DB)? This CANNOT delete single records on the device.')) {
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('processed_id', processedId);
+
+        const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || getCookie('csrftoken');
+
+        try {
+            const response = await fetch('{% url "delete_attendance" %}', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrfToken
+                },
+                body: formData
+            });
+            
+            const data = await parseJsonResponse(response);
+            
+            if (data.error) {
+                alert('Error: ' + data.error);
+            } else {
+                alert('Deleted ' + data.deleted + ' raw record(s).');
+                location.reload();
+            }
+        } catch (err) {
+            alert('Error: ' + err.message);
+        }
     }
     
     function searchAttendance() {

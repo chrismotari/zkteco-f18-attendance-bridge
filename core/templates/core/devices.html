@@ -322,27 +322,27 @@
         form.classList.toggle('show');
     }
     
-    function testDevice(deviceId, deviceName) {
+    async function testDevice(deviceId, deviceName) {
         const btn = event.target;
         const originalText = btn.innerHTML;
         btn.innerHTML = '⏳ Testing...';
         btn.disabled = true;
         
-        fetch(`/devices/${deviceId}/test/`)
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    alert(`✅ ${deviceName} connection successful!\n\nDevice Info:\n- Serial: ${data.serial_number || 'N/A'}\n- Firmware: ${data.firmware_version || 'N/A'}\n- Users: ${data.users_count || 'N/A'}\n- Records: ${data.attendance_count || 'N/A'}`);
-                } else {
-                    alert(`❌ ${deviceName} connection failed!\n\nError: ${data.error}`);
-                }
-            })
-            .catch(error => {
-                alert(`❌ Error testing ${deviceName}: ${error}`);
-            })
-            .finally(() => {
-                btn.innerHTML = originalText;
-                btn.disabled = false;
+        try {
+            const response = await fetch(`/devices/${deviceId}/test/`);
+            const data = await parseJsonResponse(response);
+            
+            if (data.success) {
+                alert(`✅ ${deviceName} connection successful!\n\nDevice Info:\n- Serial: ${data.serial_number || 'N/A'}\n- Firmware: ${data.firmware_version || 'N/A'}\n- Users: ${data.users_count || 'N/A'}\n- Records: ${data.attendance_count || 'N/A'}`);
+            } else {
+                alert(`❌ ${deviceName} connection failed!\n\nError: ${data.error}`);
+            }
+        } catch (error) {
+            alert(`❌ Error testing ${deviceName}: ${error.message}`);
+        } finally {
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        }
             });
     }
 </script>

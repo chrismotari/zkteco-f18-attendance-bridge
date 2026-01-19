@@ -141,101 +141,105 @@
 </div>
 
 <script>
-function markReviewed(outlierId) {
+async function markReviewed(outlierId) {
     if (!confirm('Mark this outlier punch as reviewed?')) return;
     
-    fetch('/outliers/mark-reviewed/', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: `outlier_id=${outlierId}&reviewed=true`
-    })
-    .then(response => response.json())
-    .then(data => {
+    try {
+        const response = await fetch('/outliers/mark-reviewed/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: `outlier_id=${outlierId}&reviewed=true`
+        });
+        
+        const data = await parseJsonResponse(response);
+        
         if (data.success) {
             location.reload();
         } else {
             alert('Error: ' + (data.error || 'Unknown error'));
         }
-    })
-    .catch(error => {
-        alert('Error marking outlier as reviewed: ' + error);
-    });
+    } catch (error) {
+        alert('Error marking outlier as reviewed: ' + error.message);
+    }
 }
 
-function markUnreviewed(outlierId) {
+async function markUnreviewed(outlierId) {
     if (!confirm('Mark this outlier punch as unreviewed?')) return;
     
-    fetch('/outliers/mark-reviewed/', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: `outlier_id=${outlierId}&reviewed=false`
-    })
-    .then(response => response.json())
-    .then(data => {
+    try {
+        const response = await fetch('/outliers/mark-reviewed/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: `outlier_id=${outlierId}&reviewed=false`
+        });
+        
+        const data = await parseJsonResponse(response);
+        
         if (data.success) {
             location.reload();
         } else {
             alert('Error: ' + (data.error || 'Unknown error'));
         }
-    })
-    .catch(error => {
-        alert('Error unmarking outlier: ' + error);
-    });
+    } catch (error) {
+        alert('Error unmarking outlier: ' + error.message);
+    }
 }
 
-function addNotes(outlierId) {
+async function addNotes(outlierId) {
     const currentNotes = document.getElementById(`notes-${outlierId}`).textContent;
     const notes = prompt('Enter notes for this outlier punch:', currentNotes === '-' ? '' : currentNotes);
     
     if (notes === null) return; // User cancelled
     
-    fetch('/outliers/mark-reviewed/', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: `outlier_id=${outlierId}&reviewed=true&notes=${encodeURIComponent(notes)}`
-    })
-    .then(response => response.json())
-    .then(data => {
+    try {
+        const response = await fetch('/outliers/mark-reviewed/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: `outlier_id=${outlierId}&reviewed=true&notes=${encodeURIComponent(notes)}`
+        });
+        
+        const data = await parseJsonResponse(response);
+        
         if (data.success) {
             document.getElementById(`notes-${outlierId}`).textContent = data.notes || '-';
             alert('Notes saved successfully');
         } else {
             alert('Error: ' + (data.error || 'Unknown error'));
         }
-    })
-    .catch(error => {
-        alert('Error saving notes: ' + error);
-    });
+    } catch (error) {
+        alert('Error saving notes: ' + error.message);
+    }
 }
 
-function deleteOutlier(outlierId) {
+async function deleteOutlier(outlierId) {
     if (!confirm('Are you sure you want to delete this outlier punch? This action cannot be undone.')) return;
     
-    fetch('/outliers/delete/', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: `outlier_id=${outlierId}`
-    })
-    .then(response => response.json())
-    .then(data => {
+    try {
+        const response = await fetch('/outliers/delete/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: `outlier_id=${outlierId}`
+        });
+        
+        const data = await parseJsonResponse(response);
+        
         if (data.success) {
             document.getElementById(`outlier-row-${outlierId}`).remove();
             location.reload();
         } else {
             alert('Error: ' + (data.error || 'Unknown error'));
         }
-    })
-    .catch(error => {
-        alert('Error deleting outlier: ' + error);
-    });
+    } catch (error) {
+        alert('Error deleting outlier: ' + error.message);
+    }
 }
 </script>
 
