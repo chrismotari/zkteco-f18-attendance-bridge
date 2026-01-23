@@ -49,8 +49,18 @@
 <!-- Statistics -->
 <div class="stats">
     <div class="stat-box">
-        <div class="stat-label">Total Records</div>
+        <div class="stat-label">Total Users</div>
+        <div class="stat-value">{{ statistics.total_users }}</div>
+    </div>
+    
+    <div class="stat-box">
+        <div class="stat-label">Present</div>
         <div class="stat-value">{{ statistics.total_records }}</div>
+    </div>
+    
+    <div class="stat-box" style="background: #ecf0f1; border-left: 4px solid #95a5a6;">
+        <div class="stat-label">Absent</div>
+        <div class="stat-value" style="color: #7f8c8d;">{{ statistics.absent_count }}</div>
     </div>
     
     <div class="stat-box success">
@@ -93,7 +103,6 @@
     <table>
         <thead>
             <tr>
-                <th>User ID</th>
                 <th>User Name</th>
                 <th>Device</th>
                 <th>Clock In</th>
@@ -108,8 +117,7 @@
         <tbody>
             {% for attendance in attendances %}
             <tr>
-                <td><strong>{{ attendance.user_id }}</strong></td>
-                <td>{{ attendance.user_name_display }}</td>
+                <td><strong>{{ attendance.user_name_display }}</strong></td>
                 <td>{{ attendance.device.name }}</td>
                 <td>
                     {% if attendance.clock_in %}
@@ -133,39 +141,48 @@
                     {% endif %}
                 </td>
                 <td>
-                    {% if attendance.is_incomplete %}
-                        <span class="badge" style="background: #2196f3; color: white;">📋 Incomplete</span>
-                    {% endif %}
-                    {% if attendance.is_late_arrival %}
-                        <span class="badge" style="background: #ff9800; color: white;">⏰ Late Arrival</span>
-                    {% endif %}
-                    {% if attendance.is_early_departure %}
-                        <span class="badge" style="background: #f44336; color: white;">⏱️ Left Early</span>
-                    {% endif %}
-                    {% if attendance.is_outlier %}
-                        <span class="badge" style="background: #ffc107; color: #333;">⚠️ Outlier</span>
-                    {% endif %}
-                    {% if not attendance.is_incomplete and not attendance.is_late_arrival and not attendance.is_early_departure and not attendance.is_outlier %}
-                        <span class="badge badge-success">✓ Normal</span>
+                    {% if not attendance.attendance %}
+                        <span class="badge" style="background: #95a5a6; color: white;">🚫 Absent</span>
+                    {% else %}
+                        {% if attendance.is_incomplete %}
+                            <span class="badge" style="background: #2196f3; color: white;">📋 Incomplete</span>
+                        {% endif %}
+                        {% if attendance.is_late_arrival %}
+                            <span class="badge" style="background: #ff9800; color: white;">⏰ Late Arrival</span>
+                        {% endif %}
+                        {% if attendance.is_early_departure %}
+                            <span class="badge" style="background: #f44336; color: white;">⏱️ Left Early</span>
+                        {% endif %}
+                        {% if attendance.is_outlier %}
+                            <span class="badge" style="background: #ffc107; color: #333;">⚠️ Outlier</span>
+                        {% endif %}
+                        {% if not attendance.is_incomplete and not attendance.is_late_arrival and not attendance.is_early_departure and not attendance.is_outlier %}
+                            <span class="badge badge-success">✓ Normal</span>
+                        {% endif %}
                     {% endif %}
                 </td>
                 <td>
-                    {% if attendance.synced_to_crm %}
-                        <span class="badge badge-success">✓ Synced</span>
+                    {% if attendance.attendance %}
+                        {% if attendance.synced_to_crm %}
+                            <span class="badge badge-success">✓ Synced</span>
+                        {% else %}
+                            <span class="badge badge-warning">Pending</span>
+                        {% endif %}
                     {% else %}
-                        <span class="badge badge-warning">Pending</span>
+                        <span class="badge" style="background: #ecf0f1; color: #7f8c8d;">-</span>
                     {% endif %}
                 </td>
                 <td>
                     {% if attendance.outlier_reason %}
                         <small style="color: #e74c3c;">{{ attendance.outlier_reason }}</small>
                     {% endif %}
-                    {% if attendance.sync_error %}
-                        <small style="color: #e67e22;">Sync error: {{ attendance.sync_error }}</small>
-                    {% endif %}
                 </td>
                 <td>
-                    <button class="btn btn-danger" onclick="deleteProcessed({{ attendance.id }})">Delete</button>
+                    {% if attendance.id %}
+                        <button class="btn btn-danger" onclick="deleteProcessed({{ attendance.id }})">Delete</button>
+                    {% else %}
+                        -
+                    {% endif %}
                 </td>
             </tr>
             {% endfor %}
@@ -238,7 +255,13 @@
                 // Show success message
                 let message = `Sync complete for ${data.date}:\n\n`;
                 message += `Total Raw Records Fetched: ${data.total_raw_fetched}\n`;
-                message += `Total Processed: ${data.total_processed}\n\n`;
+                message += `Total Processed: ${data.total_processed}\n`;
+                message += `Total Outliers Found: ${data.total_outliers}`;
+                if (data.new_outliers > 0) {
+                    message += ` (${data.new_outliers} new)\n\n`;
+                } else {
+                    message += `\n\n`;
+                }
                 
                 if (data.processing_error) {
                     message += `Processing Error: ${data.processing_error}\n\n`;

@@ -176,9 +176,10 @@ class ProcessedAttendanceViewSet(viewsets.ReadOnlyModelViewSet):
 def attendance_report(request):
     """
     Display attendance report for a specific date.
+    Shows all users, including those who didn't clock in.
     Allows filtering by date and device.
     """
-    from django.db.models import Subquery, OuterRef, CharField, Value, Q
+    from django.db.models import Subquery, OuterRef, CharField, Value, Q, Prefetch
     from django.db.models.functions import Coalesce
     
     # Get date from request (default to today)
@@ -197,72 +198,85 @@ def attendance_report(request):
     # Get search query
     search_query = request.GET.get('search', '').strip()
     
-    # Subquery to get user name from DeviceUser table (efficient - single query)
-    user_name_subquery = DeviceUser.objects.filter(
-        user_id=OuterRef('user_id')
-    ).values('name')[:1]
-    
-    # Query processed attendance for selected date with annotated user_name
-    # Use shift_date (new field) with fallback to date (legacy) for backward compatibility
-    attendances = ProcessedAttendance.objects.filter(
-        Q(shift_date=selected_date) | Q(date=selected_date, shift_date__isnull=True)
-    ).annotate(
-        user_name_display=Coalesce(
-            Subquery(user_name_subquery, output_field=CharField()),
-            'user_id',  # Fallback to user_id if no DeviceUser found
-            output_field=CharField()
-        )
-    )
+    # Get all users (optionally filtered by device or search)
+    users_query = DeviceUser.objects.all()
     
     # Apply device filter if specified
     if device_id:
-        attendances = attendances.filter(device_id=device_id)
+        users_query = users_query.filter(device_id=device_id)
     
     # Apply search filter if specified
     if search_query:
-        # Search in user_id or user_name (via DeviceUser)
-        attendances = attendances.filter(
+        users_query = users_query.filter(
             Q(user_id__icontains=search_query) |
-            Q(user_id__in=DeviceUser.objects.filter(name__icontains=search_query).values_list('user_id', flat=True))
+            Q(name__icontains=search_query) |
+            Q(full_name__icontains=search_query)
         )
     
-    # Order by user_id
-    attendances = attendances.select_related('device').order_by('user_id')
+    # Get attendance records for the selected date
+    attendance_records = ProcessedAttendance.objects.filter(
+        Q(shift_date=selected_date) | Q(date=selected_date, shift_date__isnull=True)
+    ).select_related('device')
+    
+    if device_id:
+        attendance_records = attendance_records.filter(device_id=device_id)
+    
+    # Create a dictionary of attendance records by user_id for easy lookup
+    attendance_by_user = {att.user_id: att for att in attendance_records}
+    
+    # Build a list combining users with their attendance (or None)
+    combined_data = []
+    for user in users_query.select_related('device').order_by('full_name', 'name'):
+        attendance = attendance_by_user.get(user.user_id)
+        combined_data.append({
+            'user': user,
+            'user_name_display': user.display_name,
+            'user_id': user.user_id,
+            'device': user.device,
+            'attendance': attendance,
+            'clock_in': attendance.clock_in if attendance else None,
+            'clock_out': attendance.clock_out if attendance else None,
+            'hours_worked': attendance.hours_worked if attendance else None,
+            'is_incomplete': attendance.is_incomplete if attendance else False,
+            'is_late_arrival': attendance.is_late_arrival if attendance else False,
+            'is_early_departure': attendance.is_early_departure if attendance else False,
+            'is_outlier': attendance.is_outlier if attendance else False,
+            'synced_to_crm': attendance.synced_to_crm if attendance else False,
+            'outlier_reason': attendance.outlier_reason if attendance else None,
+            'id': attendance.id if attendance else None,
+        })
     
     # Get all devices for filter dropdown
     devices = Device.objects.all()
     
-    # Calculate statistics
-    total_records = attendances.count()
-    outliers_count = attendances.filter(is_outlier=True).count()
-    late_arrivals = attendances.filter(is_late_arrival=True).count()
-    early_departures = attendances.filter(is_early_departure=True).count()
-    incomplete_count = attendances.filter(is_incomplete=True).count()
-    normal_count = attendances.filter(
-        is_outlier=False, 
-        is_late_arrival=False, 
-        is_early_departure=False,
-        is_incomplete=False
-    ).count()
-    synced_count = attendances.filter(synced_to_crm=True).count()
+    # Calculate statistics based on actual attendance records
+    total_users = len(combined_data)
+    total_records = len([d for d in combined_data if d['attendance']])
+    outliers_count = len([d for d in combined_data if d['is_outlier']])
+    late_arrivals = len([d for d in combined_data if d['is_late_arrival']])
+    early_departures = len([d for d in combined_data if d['is_early_departure']])
+    incomplete_count = len([d for d in combined_data if d['is_incomplete']])
+    normal_count = len([d for d in combined_data if d['attendance'] and not d['is_outlier'] and not d['is_late_arrival'] and not d['is_early_departure'] and not d['is_incomplete']])
+    synced_count = len([d for d in combined_data if d['synced_to_crm']])
     unsynced_count = total_records - synced_count
+    absent_count = total_users - total_records
     
     # Calculate total hours worked
     total_hours = 0
-    for attendance in attendances:
-        if attendance.clock_in and attendance.clock_out:
-            hours = attendance.hours_worked
-            if hours:
-                total_hours += hours
+    for data in combined_data:
+        if data['hours_worked']:
+            total_hours += data['hours_worked']
     
     context = {
         'selected_date': selected_date,
         'selected_device_id': device_id,
         'search_query': search_query,
-        'attendances': attendances,
+        'attendances': combined_data,
         'devices': devices,
         'statistics': {
+            'total_users': total_users,
             'total_records': total_records,
+            'absent_count': absent_count,
             'outliers_count': outliers_count,
             'late_arrivals': late_arrivals,
             'early_departures': early_departures,
@@ -375,8 +389,16 @@ def attendance_print(request):
     search_query = request.GET.get('search', '').strip()
     
     # Subquery to get user name from DeviceUser table (efficient - single query)
-    user_name_subquery = DeviceUser.objects.filter(
-        user_id=OuterRef('user_id')
+    # Match by both user_id and device to handle cases where same user_id exists on multiple devices
+    # Prefer full_name, fall back to name, then user_id
+    full_name_subquery = DeviceUser.objects.filter(
+        user_id=OuterRef('user_id'),
+        device=OuterRef('device')
+    ).values('full_name')[:1]
+    
+    name_subquery = DeviceUser.objects.filter(
+        user_id=OuterRef('user_id'),
+        device=OuterRef('device')
     ).values('name')[:1]
     
     # Query processed attendance for selected date with annotated user_name
@@ -386,7 +408,8 @@ def attendance_print(request):
         Q(shift_date=selected_date) | Q(date=selected_date, shift_date__isnull=True)
     ).annotate(
         user_name_display=Coalesce(
-            Subquery(user_name_subquery, output_field=CharField()),
+            Subquery(full_name_subquery, output_field=CharField()),
+            Subquery(name_subquery, output_field=CharField()),
             'user_id',  # Fallback to user_id if no DeviceUser found
             output_field=CharField()
         )
@@ -406,11 +429,14 @@ def attendance_print(request):
         from django.db.models import Q
         attendances = attendances.filter(
             Q(user_id__icontains=search_query) |
-            Q(user_id__in=DeviceUser.objects.filter(name__icontains=search_query).values_list('user_id', flat=True))
+            Q(user_id__in=DeviceUser.objects.filter(
+                Q(name__icontains=search_query) |
+                Q(full_name__icontains=search_query)
+            ).values_list('user_id', flat=True))
         )
     
-    # Order by user_id
-    attendances = attendances.select_related('device').order_by('user_id')
+    # Order by user_name_display alphabetically
+    attendances = attendances.select_related('device').order_by('user_name_display')
     
     # Calculate statistics
     total_records = attendances.count()
@@ -449,9 +475,11 @@ def attendance_print(request):
 def sync_day(request):
     """
     Sync attendance for a specific day: fetch raw data and process it.
+    Also identifies and records outlier punches.
     """
     from .device_utils import fetch_attendance
     from .processing_utils import process_all_attendance_for_date
+    from .models import OutlierPunch
     
     if request.method != 'POST':
         return JsonResponse({'error': 'POST request required'}, status=405)
@@ -477,11 +505,20 @@ def sync_day(request):
     if not devices.exists():
         return JsonResponse({'error': 'No enabled devices found'}, status=404)
     
+    # Count outliers before processing
+    outliers_before = OutlierPunch.objects.filter(
+        punch_datetime__date=sync_date
+    )
+    if device_id:
+        outliers_before = outliers_before.filter(device_id=device_id)
+    outliers_count_before = outliers_before.count()
+    
     results = {
         'date': date_str,
         'devices': [],
         'total_raw_fetched': 0,
         'total_processed': 0,
+        'total_outliers': 0,
     }
     
     # Fetch raw attendance for each device
@@ -538,25 +575,96 @@ def sync_day(request):
     except Exception as e:
         results['processing_error'] = str(e)
     
+    # Count outliers after processing to see how many were created
+    outliers_after = OutlierPunch.objects.filter(
+        punch_datetime__date=sync_date
+    )
+    if device_id:
+        outliers_after = outliers_after.filter(device_id=device_id)
+    outliers_count_after = outliers_after.count()
+    results['total_outliers'] = outliers_count_after
+    results['new_outliers'] = outliers_count_after - outliers_count_before
+    
     return JsonResponse(results)
 
 
 def dashboard(request):
     """
-    Main dashboard showing overview of attendance system.
+    Main dashboard showing overview of attendance system with paginated raw attendance.
     """
-    # Get recent attendance records
-    recent_attendances = ProcessedAttendance.objects.select_related('device').order_by('-date', '-updated_at')[:20]
+    from django.core.paginator import Paginator
+    from django.db.models import Subquery, OuterRef, CharField, Q
+    from django.db.models.functions import Coalesce
+    
+    # Get filter parameters
+    selected_date_str = request.GET.get('date')
+    employee_filter = request.GET.get('employee', '').strip()
+    page_number = request.GET.get('page', 1)
+    
+    # Determine date filter
+    if selected_date_str:
+        try:
+            selected_date = datetime.strptime(selected_date_str, '%Y-%m-%d').date()
+        except ValueError:
+            selected_date = timezone.now().date()
+    else:
+        selected_date = timezone.now().date()
+    
+    # Subquery to get user name from DeviceUser table
+    # Match by both user_id and device to handle cases where same user_id exists on multiple devices
+    # Prefer full_name, fall back to name, then user_id
+    full_name_subquery = DeviceUser.objects.filter(
+        user_id=OuterRef('user_id'),
+        device=OuterRef('device')
+    ).values('full_name')[:1]
+    
+    name_subquery = DeviceUser.objects.filter(
+        user_id=OuterRef('user_id'),
+        device=OuterRef('device')
+    ).values('name')[:1]
+    
+    # Query raw attendance records for the selected date
+    raw_attendances = RawAttendance.objects.filter(
+        timestamp__date=selected_date
+    ).annotate(
+        user_name_display=Coalesce(
+            Subquery(full_name_subquery, output_field=CharField()),
+            Subquery(name_subquery, output_field=CharField()),
+            'user_id',
+            output_field=CharField()
+        )
+    ).select_related('device')
+    
+    # Apply employee filter if specified
+    if employee_filter:
+        raw_attendances = raw_attendances.filter(
+            Q(user_id__icontains=employee_filter) |
+            Q(user_id__in=DeviceUser.objects.filter(
+                Q(name__icontains=employee_filter) |
+                Q(full_name__icontains=employee_filter)
+            ).values_list('user_id', flat=True))
+        )
+    
+    # Order by timestamp (most recent first)
+    raw_attendances = raw_attendances.order_by('-timestamp')
+    
+    # Paginate results (50 per page)
+    paginator = Paginator(raw_attendances, 50)
+    page_obj = paginator.get_page(page_number)
     
     # Get devices
     devices = Device.objects.all()
     
     # Get today's statistics
     today = timezone.now().date()
-    today_attendances = ProcessedAttendance.objects.filter(date=today)
+    today_attendances = ProcessedAttendance.objects.filter(
+        Q(shift_date=today) | Q(date=today, shift_date__isnull=True)
+    )
     
     context = {
-        'recent_attendances': recent_attendances,
+        'page_obj': page_obj,
+        'selected_date': selected_date,
+        'employee_filter': employee_filter,
         'devices': devices,
         'today_stats': {
             'total': today_attendances.count(),
@@ -564,6 +672,8 @@ def dashboard(request):
             'unsynced': today_attendances.filter(synced_to_crm=False).count(),
         },
         'today': today,
+        'prev_date': selected_date - timedelta(days=1),
+        'next_date': selected_date + timedelta(days=1),
     }
     
     return render(request, 'core/dashboard.html', context)
@@ -872,14 +982,23 @@ def outliers_list(request):
     search_query = request.GET.get('search', '').strip()
     
     # Subquery to get user name from DeviceUser table
-    user_name_subquery = DeviceUser.objects.filter(
-        user_id=OuterRef('user_id')
+    # Match by both user_id and device to handle cases where same user_id exists on multiple devices
+    # Prefer full_name, fall back to name, then user_id
+    full_name_subquery = DeviceUser.objects.filter(
+        user_id=OuterRef('user_id'),
+        device=OuterRef('device')
+    ).values('full_name')[:1]
+    
+    name_subquery = DeviceUser.objects.filter(
+        user_id=OuterRef('user_id'),
+        device=OuterRef('device')
     ).values('name')[:1]
     
     # Base query with user name annotation
     outliers = OutlierPunch.objects.annotate(
         user_name_display=Coalesce(
-            Subquery(user_name_subquery, output_field=CharField()),
+            Subquery(full_name_subquery, output_field=CharField()),
+            Subquery(name_subquery, output_field=CharField()),
             'user_id',
             output_field=CharField()
         )
@@ -912,7 +1031,10 @@ def outliers_list(request):
         outliers = outliers.filter(
             Q(user_id__icontains=search_query) |
             Q(reason__icontains=search_query) |
-            Q(user_id__in=DeviceUser.objects.filter(name__icontains=search_query).values_list('user_id', flat=True))
+            Q(user_id__in=DeviceUser.objects.filter(
+                Q(name__icontains=search_query) |
+                Q(full_name__icontains=search_query)
+            ).values_list('user_id', flat=True))
         )
     
     # Order by punch_datetime descending (most recent first)

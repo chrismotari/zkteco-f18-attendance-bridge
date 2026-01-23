@@ -53,7 +53,8 @@ class DeviceUser(models.Model):
     
     Attributes:
         user_id: User ID from the device (employee ID)
-        name: User's full name
+        name: User's name from device
+        full_name: User's full name (optional, preferred for display)
         privilege: User privilege level
         password: User password (if any)
         group_id: User group ID
@@ -63,7 +64,8 @@ class DeviceUser(models.Model):
         updated_at: Record update timestamp
     """
     user_id = models.CharField(max_length=50, unique=True, db_index=True, help_text="User/Employee ID from device")
-    name = models.CharField(max_length=100, help_text="User's full name")
+    name = models.CharField(max_length=100, help_text="User's name from device")
+    full_name = models.CharField(max_length=200, blank=True, help_text="User's full name (preferred for display)")
     privilege = models.IntegerField(default=0, help_text="User privilege level")
     password = models.CharField(max_length=50, blank=True, help_text="User password")
     group_id = models.CharField(max_length=50, blank=True, help_text="User group ID")
@@ -78,7 +80,12 @@ class DeviceUser(models.Model):
         verbose_name_plural = 'Device Users'
 
     def __str__(self):
-        return f"{self.name} ({self.user_id})"
+        return f"{self.display_name} ({self.user_id})"
+    
+    @property
+    def display_name(self):
+        """Return full_name if available, otherwise fall back to name."""
+        return self.full_name if self.full_name else self.name
 
 
 class RawAttendance(models.Model):
