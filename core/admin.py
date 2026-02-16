@@ -29,13 +29,13 @@ class DeviceAdmin(admin.ModelAdmin):
 @admin.register(DeviceUser)
 class DeviceUserAdmin(admin.ModelAdmin):
     """Admin interface for DeviceUser model."""
-    list_display = ['user_id', 'name', 'device', 'card_no', 'privilege', 'created_at']
+    list_display = ['user_id', 'name', 'full_name', 'device', 'card_no', 'privilege', 'created_at']
     list_filter = ['device', 'privilege', 'created_at']
-    search_fields = ['user_id', 'name', 'card_no']
+    search_fields = ['user_id', 'name', 'full_name', 'card_no']
     readonly_fields = ['created_at', 'updated_at']
     fieldsets = (
         ('User Information', {
-            'fields': ('user_id', 'name', 'device', 'privilege')
+            'fields': ('user_id', 'name', 'full_name', 'device', 'privilege')
         }),
         ('Additional Info', {
             'fields': ('card_no', 'group_id', 'password')

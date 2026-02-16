@@ -836,6 +836,29 @@ def device_user_sync(request, device_id):
     return JsonResponse(result)
 
 
+def device_user_edit(request, device_id, user_id):
+    """
+    Edit a device user (e.g., update full_name).
+    """
+    from django.shortcuts import get_object_or_404
+    from django.http import HttpResponseRedirect
+    from django.urls import reverse
+    
+    device = get_object_or_404(Device, id=device_id)
+    device_user = get_object_or_404(DeviceUser, device=device, user_id=user_id)
+    
+    if request.method == 'POST':
+        device_user.full_name = request.POST.get('full_name', '').strip()
+        device_user.save()
+        return HttpResponseRedirect(reverse('device_users', kwargs={'device_id': device_id}))
+    
+    context = {
+        'device': device,
+        'device_user': device_user,
+    }
+    return render(request, 'core/device_user_form.html', context)
+
+
 def device_user_delete(request, device_id):
     """
     Delete selected users from device.
