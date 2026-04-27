@@ -7,6 +7,7 @@ from .views import (
     DeviceViewSet, 
     RawAttendanceViewSet, 
     ProcessedAttendanceViewSet,
+    bulk_review_outliers,
     dashboard,
     attendance_report,
     attendance_print,
@@ -26,6 +27,8 @@ from .views import (
     outliers_list,
     outlier_mark_reviewed,
     outlier_delete,
+    set_user_timezone,
+    get_user_timezone
 )
 
 # Create a router and register our viewsets
@@ -61,7 +64,12 @@ urlpatterns = [
     # Outliers management views
     path('outliers/', outliers_list, name='outliers_list'),
     path('outliers/mark-reviewed/', outlier_mark_reviewed, name='outlier_mark_reviewed'),
+    path('outliers/bulk-mark-reviewed/', bulk_review_outliers, name='bulk_review_outliers'),
     path('outliers/delete/', outlier_delete, name='outlier_delete'),
+
+    # timezone
+    path('set-timezone/', set_user_timezone, name='set_timezone'),
+    path('get-timezone/', get_user_timezone, name='get_user_timezone'),
     
     # API endpoints
     path('api/', include(router.urls)),

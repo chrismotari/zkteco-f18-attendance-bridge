@@ -311,6 +311,36 @@
                 <a href="/api/">API</a>
             </nav>
         </div>
+        <div class="timezone-selector" style="float: right; margin-top: -40px;">
+            <form method="post" action="{% url 'set_timezone' %}" id="timezoneForm">
+                {% csrf_token %}
+                <select name="timezone" onchange="this.form.submit()" style="padding: 0.25rem 0.5rem; border-radius: 4px;">
+                    <option value="">Select Timezone</option>
+                    <optgroup label="Common Timezones">
+                        <option value="America/Los_Angeles" {% if user_timezone == "America/Los_Angeles" %}selected{% endif %}>PST
+                            (America/Los_Angeles)</option>
+                        <option value="America/New_York" {% if user_timezone == "America/New_York" %}selected{% endif %}>EST
+                            (America/New_York)</option>
+                        <option value="Europe/London" {% if user_timezone == "Europe/London" %}selected{% endif %}>GMT
+                            (Europe/London)</option>
+                        <option value="Africa/Nairobi" {% if user_timezone == "Africa/Nairobi" %}selected{% endif %}>EAT
+                            (Africa/Nairobi)</option>
+                        <option value="Asia/Dubai" {% if user_timezone == "Asia/Dubai" %}selected{% endif %}>GST (Asia/Dubai)
+                        </option>
+                        <option value="Asia/Tokyo" {% if user_timezone == "Asia/Tokyo" %}selected{% endif %}>JST (Asia/Tokyo)
+                        </option>
+                        <option value="Australia/Sydney" {% if user_timezone == "Australia/Sydney" %}selected{% endif %}>AEDT
+                            (Australia/Sydney)</option>
+                    </optgroup>
+                    <optgroup label="All Timezones">
+                        {% for tz in available_timezones %}
+                        <option value="{{ tz }}" {% if user_timezone == tz %}selected{% endif %}>{{ tz }}</option>
+                        {% endfor %}
+                    </optgroup>
+                </select>
+            </form>
+            <small style="color: #ecf0f1;">Current time: {% now "Y-m-d H:i:s" %}</small>
+        </div>
     </header>
     
     <main class="container">
@@ -318,6 +348,15 @@
     </main>
     
     <script>
+        function setBrowserTimezone(){
+            const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+            if(timezone){
+                document.cookie = "user_timezone=" + timezone +"; path=/";
+            }
+        }
+        document.addEventListener('DOMContentLoaded', function(){
+            setBrowserTimezone();
+        })
         // Utility function to safely parse JSON responses
         async function parseJsonResponse(response) {
             // Check if response is OK

@@ -1,7 +1,7 @@
 """
 REST API views for attendance bridge.
 """
-from rest_framework import viewsets, status
+from rest_framework import request, viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
@@ -9,7 +9,7 @@ from django.shortcuts import render
 from django.utils import timezone
 from django.conf import settings
 from datetime import datetime, timedelta
-from .models import Device, RawAttendance, ProcessedAttendance, DeviceUser
+from .models import Device, OutlierPunch, RawAttendance, ProcessedAttendance, DeviceUser
 from .serializers import DeviceSerializer, RawAttendanceSerializer, ProcessedAttendanceSerializer
 from .device_utils import poll_all_devices, get_device_info
 from .processing_utils import process_all_unprocessed_attendance, get_unsynced_attendance
@@ -18,7 +18,14 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_POST, require_http_methods
 from django.views.decorators.csrf import csrf_exempt
 from .processing_utils import process_attendance_for_date
+from django.contrib.auth.decorators import login_required
+from django.shortcuts import redirect
+from django.urls import reverse
+import pytz
+import json
+import logging
 
+logger =logging.getLogger('core')
 
 class DeviceViewSet(viewsets.ModelViewSet):
     """
@@ -115,6 +122,12 @@ class ProcessedAttendanceViewSet(viewsets.ReadOnlyModelViewSet):
     search_fields = ['user_id']
     ordering_fields = ['date', 'created_at']
     ordering = ['-date']
+
+    def get_serializer_context(self):
+        """Pass request to serializer for timezone conversion"""
+        context = super().get_serializer_context()
+        context['request'] = self.request
+        return context
     
     def get_queryset(self):
         """Filter queryset based on query parameters."""
@@ -833,7 +846,17 @@ def device_user_sync(request, device_id):
     
     result = sync_device_users_to_db(device)
     
-    return JsonResponse(result)
+    # return JsonResponse(result)
+
+    try:
+        result = sync_device_users_to_db(device)
+        return JsonResponse(result)
+    except Exception as e:
+        logger.error(f"Error syncing users for device {device.name}: {str(e)}")
+        return JsonResponse({
+            'success': False, 
+            'error': str(e)
+        }, status=500)
 
 
 def device_user_edit(request, device_id, user_id):
@@ -995,6 +1018,7 @@ def outliers_list(request):
     from .models import OutlierPunch
     from django.db.models import Subquery, OuterRef, CharField, Q
     from django.db.models.functions import Coalesce
+    from django .core.paginator import Paginator
     from datetime import datetime
     
     # Get filters from request
@@ -1003,6 +1027,7 @@ def outliers_list(request):
     date_from = request.GET.get('date_from')
     date_to = request.GET.get('date_to')
     search_query = request.GET.get('search', '').strip()
+    page_number = request.GET.get('page', 1)
     
     # Subquery to get user name from DeviceUser table
     # Match by both user_id and device to handle cases where same user_id exists on multiple devices
@@ -1062,6 +1087,10 @@ def outliers_list(request):
     
     # Order by punch_datetime descending (most recent first)
     outliers = outliers.select_related('device').order_by('-punch_datetime')
+
+    # Paginate results (50 per page)
+    paginator = Paginator(outliers, 50)
+    page_obj = paginator.get_page(page_number)
     
     # Get all devices for filter dropdown
     devices = Device.objects.all()
@@ -1072,6 +1101,7 @@ def outliers_list(request):
     unreviewed_count = total_outliers - reviewed_count
     
     context = {
+        'page_obj': page_obj,
         'outliers': outliers,
         'devices': devices,
         'total_outliers': total_outliers,
@@ -1119,6 +1149,42 @@ def outlier_mark_reviewed(request):
     except Exception as e:
         logger.error(f"Error marking outlier as reviewed: {str(e)}")
         return JsonResponse({'error': str(e)}, status=500)
+    
+@csrf_exempt
+@require_http_methods(["POST"])
+def bulk_review_outliers(request):
+    """
+    Bulk mark multiple outlier punches as reviewed or unreviewed.
+    
+    Accepts JSON POST with:
+    - outlier_ids: List of outlier IDs to update
+    - reviewed: Boolean (default True) whether to mark as reviewed
+    - notes: Optional notes to add to outliers
+    """
+    try:
+        data = json.loads(request.body)
+        outlier_ids = data.get('outlier_ids', [])
+        reviewed = data.get('reviewed', True)
+        notes = data.get('notes', '')
+        
+        if not outlier_ids:
+            return JsonResponse({'error': 'outlier_ids are required'}, status=400)
+        
+        # Update reviewed status
+        update_fields = {'reviewed': reviewed}
+        if notes:
+            update_fields['notes'] = notes
+        
+        updated_count = OutlierPunch.objects.filter(id__in=outlier_ids).update(**update_fields)
+        
+        return JsonResponse({
+            'success': True, 
+            'updated_count': updated_count, 
+            'message': f"{updated_count} outliers marked as {'reviewed' if reviewed else 'unreviewed'}"
+        })
+    except Exception as e:
+        logger.error(f"Error bulk updating outliers: {str(e)}")
+        return JsonResponse({'error': str(e)}, status=500)
 
 
 @csrf_exempt
@@ -1142,4 +1208,86 @@ def outlier_delete(request):
     except Exception as e:
         logger.error(f"Error deleting outlier: {str(e)}")
         return JsonResponse({'error': str(e)}, status=500)
+    
+@csrf_exempt
+@require_http_methods(["POST"])
+def bulk_delete_outliers(request):
+    try:
+        data = json.loads(request.body)
+        outlier_ids = data.get('outlier_ids', [])
+        
+        if not outlier_ids:
+            return JsonResponse({'error': 'outlier_ids are required'}, status=400)
+        
+        deleted_count, _ = OutlierPunch.objects.filter(id__in=outlier_ids).delete()
+        
+        return JsonResponse({
+            'success': True, 
+            'deleted_count': deleted_count, 
+            'message': f"{deleted_count} outliers deleted"
+            })
+    except Exception as e:
+        logger.error(f"Error bulk deleting outliers: {str(e)}")
+        return JsonResponse({'error': str(e)}, status=500)
 
+@csrf_exempt
+@require_http_methods(["POST"])
+def bulk_sync_attendance(request):
+
+    try:
+        data = json.loads(request.body)
+        attendance_ids = data.get('attendance_ids', [])
+        synced = data.get('synced', True)
+        
+        if not attendance_ids:
+            return JsonResponse({'error': 'attendance_ids are required'}, status=400)
+        
+        updated_count = ProcessedAttendance.objects.filter(id__in=attendance_ids).update(synced_to_crm=synced, last_sync_attempt=timezone.now()if synced else None)
+
+        return JsonResponse({
+            'success': True,
+            'updated_count': updated_count,
+            'message': f"{updated_count} attendance records synced"
+        })
+    except Exception as e:
+        logger.error(f"Error bulk syncing attendance: {str(e)}")
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+# @login_required
+def set_user_timezone(request):
+    """Set user's preferred timezone."""
+    if request.method == 'POST':
+        timezone_name = request.POST.get('timezone')
+        if timezone_name and timezone_name in pytz.all_timezones:
+            # Save to session for temporary override
+            request.session['django_timezone'] = timezone_name
+        
+        # Redirect back to previous page
+        next_url = request.POST.get('next', request.META.get('HTTP_REFERER', reverse('dashboard')))
+        return redirect(next_url)
+    
+    return redirect('dashboard')
+
+
+# @login_required
+def get_user_timezone(request):
+    """Get current user's timezone as JSON."""
+    tz_name = request.session.get('django_timezone')
+    
+    if not tz_name:
+        tz_name = getattr(settings, 'DISPLAY_TIMEZONE', 'UTC')
+    
+    # Get current time in that timezone
+    try:
+        tz = pytz.timezone(tz_name)
+        current_time = timezone.now().astimezone(tz).strftime('%Y-%m-%d %H:%M:%S')
+    except Exception as e:
+        logger.error(f"Error getting timezone: {e}")
+        tz_name = settings.DISPLAY_TIMEZONE
+        current_time = timezone.now().strftime('%Y-%m-%d %H:%M:%S')
+    
+    return JsonResponse({
+        'timezone': tz_name,
+        'current_time': current_time
+    })

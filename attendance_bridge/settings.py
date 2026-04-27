@@ -40,6 +40,8 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'core.middleware.TimezoneMiddleware', 
+    'core.middleware.TimezoneContextMiddleware', 
 ]
 
 ROOT_URLCONF = 'attendance_bridge.urls'
@@ -96,6 +98,9 @@ LANGUAGE_CODE = 'en-us'
 TIME_ZONE = os.getenv('TIME_ZONE', 'UTC')
 USE_I18N = True
 USE_TZ = True
+
+API_RETURN_UTC = os.getenv('API_RETURN_UTC', 'True') == 'True'
+
 
 # Static files (CSS, JavaScript, Images)
 STATIC_URL = 'static/'
