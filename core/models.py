@@ -187,6 +187,9 @@ class ProcessedAttendance(models.Model):
             models.Index(fields=['user_id', 'shift_date']),
             models.Index(fields=['shift_date', 'synced_to_crm']),
             models.Index(fields=['synced_to_crm', 'sync_attempts']),
+            # New optimized indexes
+            models.Index(fields=['shift_date', 'device']),
+            models.Index(fields=['device', 'shift_date', 'synced_to_crm']),
             # Legacy indexes
             models.Index(fields=['user_id', 'date']),
             models.Index(fields=['date', 'synced_to_crm']),
