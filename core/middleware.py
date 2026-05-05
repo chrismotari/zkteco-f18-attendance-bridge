@@ -47,9 +47,9 @@ class TimezoneContextMiddleware(MiddlewareMixin):
     """Add timezone info to template context."""
     
     def process_template_response(self, request, response):
-        if hasattr(response, 'context_data'):
+        if hasattr(response, 'context_data') and response.context_data is not None:
             response.context_data['user_timezone'] = getattr(
-                request, 'user_timezone', 
+                request, 'user_timezone',
                 timezone.get_current_timezone_name()
             )
             response.context_data['available_timezones'] = pytz.common_timezones[:50]  # Limited for dropdown
