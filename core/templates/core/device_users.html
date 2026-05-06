@@ -146,8 +146,8 @@
 
 <div class="actions-bar">
     <div class="btn-group">
-        <button class="btn btn-primary" onclick="syncUsers()">⬇️ Sync All to Database</button>
-        <button class="btn btn-danger" id="deleteSelectedBtn" onclick="deleteSelected()" disabled>🗑️ Delete Selected from Device</button>
+        <button class="btn btn-primary" onclick="syncUsers(event)">⬇️ Sync All to Database</button>
+        <button class="btn btn-danger" id="deleteSelectedBtn" onclick="deleteSelected(event)" disabled>🗑️ Delete Selected from Device</button>
     </div>
     <input type="text" id="searchInput" placeholder="🔍 Search users..." onkeyup="searchUsers()" style="padding: 0.5rem 1rem; border: 1px solid #ddd; border-radius: 4px; width: 300px;">
     <div id="selectedCount" style="margin-left: auto;">
@@ -202,7 +202,7 @@
                     {% if user.in_db %}
                     <a href="{% url 'device_user_edit' device.id user.user_id %}" class="btn-edit" title="Edit user">✏️</a>
                     {% else %}
-                    <span style="color: #95a5a6;" title="Sync to database first">✏️</span>
+                    <span style="color: #95a5a6;" title="Sync to database first" aria-disabled="true">✏️</span>
                     {% endif %}
                 </td>
             </tr>
@@ -220,10 +220,11 @@
 {% endif %}
 
 {% if missing_from_device %}
+{{ missing_user_ids|json_script:"missing-user-ids-data" }}
 <div class="card" style="border-left: 4px solid #e74c3c;">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
         <h2 style="color: #e74c3c; margin: 0;">⚠️ Users in Database but Missing from Device ({{ missing_count }})</h2>
-        <button class="btn btn-danger" onclick="deleteMissingUsers()">🗑️ Delete All from Database</button>
+        <button class="btn btn-danger" onclick="deleteMissingUsers(event)">🗑️ Delete All from Database</button>
     </div>
     <p style="color: #7f8c8d; margin-bottom: 1rem;">These users exist in your database but are not enrolled on the physical device. They may have been deleted from the device.</p>
     
@@ -254,6 +255,16 @@
 
 {% block extra_js %}
 <script>
+    // Helper function to handle JSON parsing safely
+    async function parseJsonResponse(response) {
+        const text = await response.text();
+        try {
+            return JSON.parse(text);
+        } catch (e) {
+            throw new Error("Invalid server response (not JSON)");
+        }
+    }
+
     function searchUsers() {
         const input = document.getElementById('searchInput');
         const filter = input.value.toLowerCase();
@@ -263,6 +274,9 @@
         let visibleCount = 0;
         for (let i = 0; i < rows.length; i++) {
             const row = rows[i];
+            // Skip the "no results" message row if it exists
+            if (row.id === 'noResultsMessage') continue;
+
             const userId = row.cells[1].textContent.toLowerCase();
             const name = row.cells[2].textContent.toLowerCase();
             const cardNo = row.cells[3].textContent.toLowerCase();
@@ -272,7 +286,6 @@
                 visibleCount++;
             } else {
                 row.style.display = 'none';
-                // Uncheck hidden rows
                 const checkbox = row.querySelector('.user-checkbox');
                 if (checkbox && checkbox.checked) {
                     checkbox.checked = false;
@@ -282,37 +295,37 @@
         
         updateSelectedCount();
         
-        // Update empty state7
-        const emptyState = document.getElementById('noResultsMessage');
+        // Manage empty state message
+        const existingMsg = document.getElementById('noResultsMessage');
         if (visibleCount === 0 && filter) {
-            if (!emptyState) {
-                const tbody = table;
+            if (!existingMsg) {
                 const tr = document.createElement('tr');
                 tr.id = 'noResultsMessage';
-                tr.innerHTML = '<td colspan="6" style="text-align: center; padding: 2rem; color: #7f8c8d;">No users found matching "' + input.value + '"</td>';
-                tbody.appendChild(tr);
+                tr.innerHTML = `<td colspan="8" style="text-align: center; padding: 2rem; color: #7f8c8d;">No users found matching "${input.value}"</td>`;
+                table.appendChild(tr);
             }
-        } else if (emptyState) {
-            emptyState.remove();
+        } else if (existingMsg) {
+            existingMsg.remove();
         }
     }
-    
+
     function toggleSelectAll() {
         const selectAll = document.getElementById('selectAll');
         const checkboxes = document.querySelectorAll('.user-checkbox');
         checkboxes.forEach(cb => {
-            // Only toggle visible checkboxes
             if (cb.closest('tr').style.display !== 'none') {
                 cb.checked = selectAll.checked;
             }
         });
         updateSelectedCount();
     }
-    
+
     function updateSelectedCount() {
         const checkboxes = document.querySelectorAll('.user-checkbox:checked');
+        // Only count visible checkboxes
         const visibleCheckboxes = Array.from(checkboxes).filter(cb => cb.closest('tr').style.display !== 'none');
         const count = visibleCheckboxes.length;
+        
         const countDisplay = document.getElementById('selectedCount');
         const countText = document.getElementById('selectedCountText');
         const deleteBtn = document.getElementById('deleteSelectedBtn');
@@ -327,9 +340,9 @@
             deleteBtn.disabled = true;
         }
     }
-    
-    async function syncUsers() {
-        const btn = event.target;
+
+    async function syncUsers(event) {
+        const btn = event.currentTarget; // Safer than event.target
         const originalText = btn.innerHTML;
         btn.innerHTML = '⏳ Syncing...';
         btn.disabled = true;
@@ -337,41 +350,35 @@
         try {
             const response = await fetch('{% url "device_user_sync" device.id %}', {
                 method: 'POST',
-                headers: {
-                    'X-CSRFToken': '{{ csrf_token }}'
-                }
+                headers: { 'X-CSRFToken': '{{ csrf_token }}' }
             });
             
             const data = await parseJsonResponse(response);
-            
             if (data.success) {
-                alert(`✅ Sync successful!\n\nTotal: ${data.total} users\nCreated: ${data.created}\nUpdated: ${data.updated}`);
+                alert(`✅ Sync successful!\n\nTotal: ${data.total}\nCreated: ${data.created}\nUpdated: ${data.updated}`);
                 location.reload();
             } else {
-                alert(`❌ Sync failed!\n\nError: ${data.error}`);
+                alert(`❌ Sync failed: ${data.error}`);
             }
         } catch (error) {
             alert(`❌ Error: ${error.message}`);
         } finally {
             btn.innerHTML = originalText;
             btn.disabled = false;
-        });
+        }
     }
-    
-    async function deleteSelected() {
+
+    async function deleteSelected(event) {
         const checkboxes = document.querySelectorAll('.user-checkbox:checked');
         const userIds = Array.from(checkboxes).map(cb => cb.value);
         
-        if (userIds.length === 0) {
-            alert('Please select users to delete');
+        if (userIds.length === 0) return;
+        
+        if (!confirm(`⚠️ WARNING: Permanently delete ${userIds.length} user(s)?\n\nBiometrics will be removed!`)) {
             return;
         }
         
-        if (!confirm(`⚠️ WARNING: This will permanently delete ${userIds.length} user(s) from the device!\n\nThis will remove:\n- Their fingerprint data\n- Their face data\n- All biometric enrollment\n\nThey will NOT be able to punch in/out until re-enrolled.\n\nContinue?`)) {
-            return;
-        }
-        
-        const btn = event.target;
+        const btn = event.currentTarget;
         const originalText = btn.innerHTML;
         btn.innerHTML = '⏳ Deleting...';
         btn.disabled = true;
@@ -387,33 +394,29 @@
             });
             
             const data = await parseJsonResponse(response);
-            
             if (data.success) {
-                alert(`✅ Deletion complete!\n\nDeleted: ${data.deleted}\nFailed: ${data.failed}`);
+                alert(`✅ Complete!\nDeleted: ${data.deleted}\nFailed: ${data.failed}`);
                 location.reload();
             } else {
-                alert(`❌ Deletion failed!\n\nError: ${data.error}`);
+                alert(`❌ Failed: ${data.error}`);
             }
         } catch (error) {
             alert(`❌ Error: ${error.message}`);
         } finally {
-        .finally(() => {
             btn.innerHTML = originalText;
             btn.disabled = false;
-        });
-    }
-    
-    async function deleteMissingUsers() {
-        if (!confirm('⚠️ WARNING: This will delete {{ missing_count }} user(s) from the database!\n\nThese users are not on the device anymore. Deleting them will:\n- Remove them from the database\n- Keep their attendance history intact\n\nContinue?')) {
-            return;
         }
+    }
+
+    async function deleteMissingUsers(event) {
+        if (!confirm('⚠️ Delete these users from the database?')) return;
         
-        const btn = event.target;
+        const btn = event.currentTarget;
         const originalText = btn.innerHTML;
         btn.innerHTML = '⏳ Deleting...';
         btn.disabled = true;
         
-        const userIds = {{ missing_user_ids|safe }};
+        const userIds = JSON.parse(document.getElementById('missing-user-ids-data').textContent);
         
         try {
             const response = await fetch('{% url "device_user_delete_from_db" device.id %}', {
@@ -426,19 +429,18 @@
             });
             
             const data = await parseJsonResponse(response);
-            
             if (data.success) {
-                alert(`✅ Deleted ${data.deleted} user(s) from database`);
+                alert(`✅ Deleted ${data.deleted} user(s)`);
                 location.reload();
             } else {
-                alert(`❌ Deletion failed!\n\nError: ${data.error}`);
+                alert(`❌ Failed: ${data.error}`);
             }
         } catch (error) {
             alert(`❌ Error: ${error.message}`);
         } finally {
             btn.innerHTML = originalText;
             btn.disabled = false;
-        });
+        }
     }
 </script>
 {% endblock %}

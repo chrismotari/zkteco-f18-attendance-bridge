@@ -95,6 +95,19 @@
     </div>
 </div>
 
+#Timezone Information
+<div class="card" style="background: #e8f4fd; margin-bottom: 1rem;">
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div>
+            <strong>🌍 Timezone Information:</strong>
+            <span id="currentTimezone">Loading...</span>
+        </div>
+        <div>
+            <button onclick="toggleTimezoneSelector()" class="btn btn-secondary btn-sm">Change Timezone</button>
+        </div>
+    </div>
+</div>
+
 <!-- Attendance Table -->
 <div class="card">
     <h2>Attendance Records for {{ selected_date|date:"F d, Y" }}</h2>
@@ -199,6 +212,28 @@
 
 {% block extra_js %}
 <script>
+    // Display current timezone
+    function displayCurrentTimezone() {
+        fetch('/get-timezone/')
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('currentTimezone').innerHTML = 
+                    `<span style="color: #2980b9;">${data.timezone}</span> (Current time: ${data.current_time})`;
+            })
+            .catch(error => console.error('Error fetching timezone:', error));
+    }
+
+    function toggleTimezoneSelector() {
+        const selector = document.getElementById('timezoneSelector');
+        if (selector.style.display === 'none') {
+            selector.style.display = 'block';
+        } else {
+            selector.style.display = 'none';
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', displayCurrentTimezone);
+
     // Auto-submit form when date or device changes
     document.getElementById('date').addEventListener('change', function() {
         this.form.submit();

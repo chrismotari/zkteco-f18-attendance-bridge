@@ -1,3 +1,5 @@
+<!-- core/templates/core/outliers_list.html - Add pagination section -->
+
 {% extends "core/base.html" %}
 {% load timezone_filters %}
 
@@ -70,13 +72,25 @@
 
 <!-- Outliers Table -->
 <div class="card">
-    <h3>Outlier Punches ({{ total_outliers }})</h3>
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem;">
+        <h3>Outlier Punches</h3>
+        
+        {% if page_obj %}
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <button id="bulkMarkReviewedBtn" class="btn btn-primary" onclick="bulkMarkReviewed()" disabled>✓ Bulk Mark Reviewed</button>
+            <span id="selectedCount" style="font-size: 0.9rem; color: #666;"></span>
+        </div>
+        {% endif %}
+    </div>
     
-    {% if outliers %}
+    {% if page_obj %}
     <div style="overflow-x: auto;">
-        <table>
+        <table class="outliers-table">
             <thead>
                 <tr>
+                    <th style="width: 40px; text-align: center;">
+                        <input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll()">
+                    </th>
                     <th>User</th>
                     <th>Device</th>
                     <th>Punch Time</th>
@@ -84,12 +98,19 @@
                     <th>Reason</th>
                     <th>Status</th>
                     <th>Notes</th>
-                    <th>Actions</th>
+                    <th style="width: 180px;">Actions</th>
                 </tr>
             </thead>
             <tbody id="outliersTable">
                 {% for outlier in outliers %}
-                <tr id="outlier-row-{{ outlier.id }}" {% if outlier.reviewed %}style="opacity: 0.6;"{% endif %}>
+                <tr id="outlier-row-{{ outlier.id }}" {% if outlier.reviewed %}class="reviewed-row"{% endif %}>
+                    <td style="text-align: center;">
+                        {% if not outlier.reviewed %}
+                        <input type="checkbox" class="outlier-checkbox" data-id="{{ outlier.id }}" onchange="updateSelectedCount()">
+                        {% else %}
+                        <span style="color: #27ae60;">✓</span>
+                        {% endif %}
+                    </td>
                     <td>
                         <strong>{{ outlier.user_name_display }}</strong><br>
                         <small style="color: #666;">ID: {{ outlier.user_id }}</small>
@@ -106,7 +127,7 @@
                             <span style="color: #999;">-</span>
                         {% endif %}
                     </td>
-                    <td style="max-width: 300px;">
+                    <td style="max-width: 250px;">
                         <small>{{ outlier.reason }}</small>
                     </td>
                     <td>
@@ -116,18 +137,18 @@
                             <span class="badge badge-unreviewed">⚠ Unreviewed</span>
                         {% endif %}
                     </td>
-                    <td style="max-width: 200px;">
+                    <td style="max-width: 150px;">
                         <small id="notes-{{ outlier.id }}">{{ outlier.notes|default:"-" }}</small>
                     </td>
                     <td>
                         <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
                             {% if not outlier.reviewed %}
-                                <button class="btn-small btn-primary" onclick="markReviewed({{ outlier.id }})">✓ Mark Reviewed</button>
+                                <button class="btn-small btn-primary" onclick="markReviewed('{{ outlier.id }}')">Mark</button>
                             {% else %}
-                                <button class="btn-small btn-secondary" onclick="markUnreviewed({{ outlier.id }})">↺ Unmark</button>
+                                <button class="btn-small btn-secondary" onclick="markUnreviewed('{{ outlier.id }}')">Unmark</button>
                             {% endif %}
-                            <button class="btn-small btn-secondary" onclick="addNotes({{ outlier.id }})">📝 Notes</button>
-                            <button class="btn-small btn-danger" onclick="deleteOutlier({{ outlier.id }})">🗑️ Delete</button>
+                            <button class="btn-small btn-info" onclick="addNotes('{{ outlier.id }}')">Notes</button>
+                            <button class="btn-small btn-danger" onclick="deleteOutlier('{{ outlier.id }}')">Delete</button>
                         </div>
                     </td>
                 </tr>
@@ -135,12 +156,234 @@
             </tbody>
         </table>
     </div>
+    
+    Pagination
+    <div class="pagination-container">
+        <div class="pagination-info">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }} outliers
+        </div>
+        <div class="pagination-controls">
+            {% if page_obj.has_previous %}
+                <a href="?page=1{% if selected_device %}&device={{ selected_device }}{% endif %}{% if reviewed_filter %}&reviewed={{ reviewed_filter }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}{% if search_query %}&search={{ search_query }}{% endif %}" class="btn btn-secondary btn-sm">« First</a>
+                <a href="?page={{ page_obj.previous_page_number }}{% if selected_device %}&device={{ selected_device }}{% endif %}{% if reviewed_filter %}&reviewed={{ reviewed_filter }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}{% if search_query %}&search={{ search_query }}{% endif %}" class="btn btn-secondary btn-sm">← Previous</a>
+            {% endif %}
+            
+            <span class="current-page">
+                Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+            </span>
+            
+            {% if page_obj.has_next %}
+                <a href="?page={{ page_obj.next_page_number }}{% if selected_device %}&device={{ selected_device }}{% endif %}{% if reviewed_filter %}&reviewed={{ reviewed_filter }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}{% if search_query %}&search={{ search_query }}{% endif %}" class="btn btn-secondary btn-sm">Next →</a>
+                <a href="?page={{ page_obj.paginator.num_pages }}{% if selected_device %}&device={{ selected_device }}{% endif %}{% if reviewed_filter %}&reviewed={{ reviewed_filter }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}{% if search_query %}&search={{ search_query }}{% endif %}" class="btn btn-secondary btn-sm">Last »</a>
+            {% endif %}
+        </div>
+    </div>
+    
     {% else %}
     <p style="text-align: center; padding: 2rem; color: #666;">No outlier punches found matching the criteria.</p>
     {% endif %}
 </div>
 
+<style>
+    /* Pagination styles */
+    .pagination-container {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: 1.5rem;
+        padding-top: 1rem;
+        border-top: 1px solid #ecf0f1;
+        flex-wrap: wrap;
+        gap: 1rem;
+    }
+    
+    .pagination-info {
+        color: #7f8c8d;
+        font-size: 0.9rem;
+    }
+    
+    .pagination-controls {
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+        flex-wrap: wrap;
+    }
+    
+    .btn-sm {
+        padding: 0.4rem 0.8rem;
+        font-size: 0.85rem;
+    }
+    
+    .current-page {
+        padding: 0.4rem 0.8rem;
+        background: #3498db;
+        color: white;
+        border-radius: 4px;
+        font-size: 0.85rem;
+    }
+    
+    .badge-reviewed {
+        background: #27ae60;
+        color: white;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        font-size: 0.75rem;
+    }
+    
+    .badge-unreviewed {
+        background: #e74c3c;
+        color: white;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        font-size: 0.75rem;
+    }
+    
+    .btn-small {
+        padding: 0.25rem 0.5rem;
+        font-size: 0.75rem;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+    
+    .btn-primary {
+        background: #3498db;
+        color: white;
+    }
+    
+    .btn-secondary {
+        background: #95a5a6;
+        color: white;
+    }
+    
+    .btn-info {
+        background: #3498db;
+        color: white;
+    }
+    
+    .btn-danger {
+        background: #e74c3c;
+        color: white;
+    }
+    
+    .outlier-checkbox {
+        width: 18px;
+        height: 18px;
+        cursor: pointer;
+    }
+    
+    #selectAllCheckbox {
+        width: 18px;
+        height: 18px;
+        cursor: pointer;
+    }
+    
+    .reviewed-row {
+        background: #f0f9f0;
+    }
+</style>
+
 <script>
+let selectedOutlierIds = new Set();
+
+function toggleSelectAll() {
+    const selectAllCheckBox = document.getElementById('selectAllCheckbox');
+    const checkboxes = document.querySelectorAll('.outlier-checkbox');
+
+    checkboxes.forEach(checkbox => {
+        if (!checkbox.closest('tr.reviewed-row')) {
+            checkbox.checked = selectAllCheckBox.checked;
+            const id = parseInt(checkbox.dataset.id);
+            if (selectAllCheckBox.checked) {
+                selectedOutlierIds.add(id);
+            } else {
+                selectedOutlierIds.delete(id);
+            }
+        }
+    });
+    updateSelectedCount();
+}
+
+function updateSelectedCount() {
+    const checkboxes = document.querySelectorAll('.outlier-checkbox:checked');
+    selectedOutlierIds.clear();
+    
+    checkboxes.forEach(checkbox => {
+        selectedOutlierIds.add(parseInt(checkbox.dataset.id));
+    });
+    
+    const selectedCount = selectedOutlierIds.size;
+    const countDisplay = document.getElementById('selectedCount');
+    const bulkBtn = document.getElementById('bulkMarkReviewedBtn');
+
+    if (selectedCount > 0) {
+        countDisplay.textContent = `${selectedCount} selected`;
+        bulkBtn.disabled = false;
+    } else {
+        countDisplay.textContent = "";
+        bulkBtn.disabled = true;
+    }
+
+    const selectAllCheckBox = document.getElementById('selectAllCheckbox');
+    const totalUnreviewedCheckboxes = document.querySelectorAll('tbody tr:not(.reviewed-row) .outlier-checkbox').length;
+
+    if (totalUnreviewedCheckboxes > 0) {
+        if (selectedCount === totalUnreviewedCheckboxes) {
+            selectAllCheckBox.checked = true;
+            selectAllCheckBox.indeterminate = false;
+        } else if (selectedCount > 0) {
+            selectAllCheckBox.checked = false;
+            selectAllCheckBox.indeterminate = true;
+        } else {
+            selectAllCheckBox.checked = false;
+            selectAllCheckBox.indeterminate = false;
+        }
+    }
+}
+
+async function bulkMarkReviewed() {
+    if (selectedOutlierIds.size === 0) {
+        alert('Please select at least one outlier to mark as reviewed');
+        return;
+    }
+    
+    if (!confirm(`Mark ${selectedOutlierIds.size} selected outlier(s) as reviewed?`)) {
+        return;
+    }
+    
+    const bulkBtn = document.getElementById('bulkMarkReviewedBtn');
+    const originalText = bulkBtn.innerHTML;
+    bulkBtn.innerHTML = '⏳ Processing...';
+    bulkBtn.disabled = true;
+    
+    try {
+        const response = await fetch('/outliers/bulk-mark-reviewed/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify({
+                outlier_ids: Array.from(selectedOutlierIds)
+            })
+        });
+        
+        const data = await parseJsonResponse(response);
+        
+        if (data.success) {
+            alert(`Successfully marked ${data.updated_count} outlier(s) as reviewed`);
+            location.reload();
+        } else {
+            alert('Error: ' + (data.error || 'Unknown error'));
+        }
+    } catch (error) {
+        alert('Error bulk marking outliers: ' + error.message);
+    } finally {
+        bulkBtn.innerHTML = originalText;
+        bulkBtn.disabled = false;
+    }
+}
+
 async function markReviewed(outlierId) {
     if (!confirm('Mark this outlier punch as reviewed?')) return;
     
@@ -193,7 +436,7 @@ async function addNotes(outlierId) {
     const currentNotes = document.getElementById(`notes-${outlierId}`).textContent;
     const notes = prompt('Enter notes for this outlier punch:', currentNotes === '-' ? '' : currentNotes);
     
-    if (notes === null) return; // User cancelled
+    if (notes === null) return;
     
     try {
         const response = await fetch('/outliers/mark-reviewed/', {
@@ -232,7 +475,8 @@ async function deleteOutlier(outlierId) {
         const data = await parseJsonResponse(response);
         
         if (data.success) {
-            document.getElementById(`outlier-row-${outlierId}`).remove();
+            const row = document.getElementById(`outlier-row-${outlierId}`);
+            if (row) row.remove();
             location.reload();
         } else {
             alert('Error: ' + (data.error || 'Unknown error'));
@@ -242,34 +486,4 @@ async function deleteOutlier(outlierId) {
     }
 }
 </script>
-
-<style>
-.badge-reviewed {
-    background: #27ae60;
-    color: white;
-}
-
-.badge-unreviewed {
-    background: #e74c3c;
-    color: white;
-}
-
-.btn-small {
-    padding: 0.25rem 0.5rem;
-    font-size: 0.875rem;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    white-space: nowrap;
-}
-
-.btn-danger {
-    background: #e74c3c;
-    color: white;
-}
-
-.btn-danger:hover {
-    background: #c0392b;
-}
-</style>
 {% endblock %}

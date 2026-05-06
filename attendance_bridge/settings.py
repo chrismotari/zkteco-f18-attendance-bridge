@@ -17,7 +17,15 @@ SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-change-this-in-prod
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DEBUG', 'True') == 'True'
 
+<<<<<<< HEAD
+# ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 ALLOWED_HOSTS = ['*']
+
+# Security Configuration
+SECURE_CROSS_ORIGIN_OPENER_POLICY = None
+=======
+ALLOWED_HOSTS = ['*']
+>>>>>>> main
 
 # Application definition
 INSTALLED_APPS = [
@@ -40,6 +48,8 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'core.middleware.TimezoneMiddleware', 
+    'core.middleware.TimezoneContextMiddleware', 
 ]
 
 ROOT_URLCONF = 'attendance_bridge.urls'
@@ -96,6 +106,9 @@ LANGUAGE_CODE = 'en-us'
 TIME_ZONE = os.getenv('TIME_ZONE', 'UTC')
 USE_I18N = True
 USE_TZ = True
+
+API_RETURN_UTC = os.getenv('API_RETURN_UTC', 'True') == 'True'
+
 
 # Static files (CSS, JavaScript, Images)
 STATIC_URL = 'static/'

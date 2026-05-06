@@ -14,3 +14,10 @@ class CoreConfig(AppConfig):
         Import signals when the app is ready.
         """
         import core.signals  # noqa
+
+         # Load template tags
+        try:
+            from django.template.defaultfilters import register
+            import core.templatetags.timezone_filters  # noqa
+        except ImportError:
+            pass
