@@ -1028,6 +1028,15 @@ def outliers_list(request):
     date_to = request.GET.get('date_to')
     search_query = request.GET.get('search', '').strip()
     page_number = request.GET.get('page', 1)
+
+    # Get per-page count with validation
+    ALLOWED_PER_PAGE = {25, 50, 100, 200}
+    try:
+        per_page = int(request.GET.get('per_page', 50))
+        if per_page not in ALLOWED_PER_PAGE:
+            per_page = 50
+    except (ValueError, TypeError):
+        per_page = 50
     
     # Subquery to get user name from DeviceUser table
     # Match by both user_id and device to handle cases where same user_id exists on multiple devices
@@ -1088,8 +1097,8 @@ def outliers_list(request):
     # Order by punch_datetime descending (most recent first)
     outliers = outliers.select_related('device').order_by('-punch_datetime')
 
-    # Paginate results (50 per page)
-    paginator = Paginator(outliers, 50)
+    # Paginate results
+    paginator = Paginator(outliers, per_page)
     page_obj = paginator.get_page(page_number)
     
     # Get all devices for filter dropdown
@@ -1112,6 +1121,7 @@ def outliers_list(request):
         'date_from': date_from,
         'date_to': date_to,
         'search_query': search_query,
+        'per_page': per_page,
         'today': timezone.now().date(),
     }
     

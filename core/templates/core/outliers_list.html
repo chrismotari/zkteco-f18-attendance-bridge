@@ -15,12 +15,12 @@
     <form method="get" class="filter-form">
         <div>
             <label for="date_from">From Date:</label>
-            <input type="date" id="date_from" name="date_from" value="{{ date_from }}">
+            <input type="date" id="date_from" name="date_from" value="{{ date_from|default:'' }}">
         </div>
-        
+
         <div>
             <label for="date_to">To Date:</label>
-            <input type="date" id="date_to" name="date_to" value="{{ date_to }}">
+            <input type="date" id="date_to" name="date_to" value="{{ date_to|default:'' }}">
         </div>
         
         <div>
@@ -43,9 +43,19 @@
                 <option value="true" {% if reviewed_filter == 'true' %}selected{% endif %}>Reviewed</option>
             </select>
         </div>
-        
+
+        <div>
+            <label for="per_page">Per page:</label>
+            <select id="per_page" name="per_page">
+                <option value="25" {% if per_page == 25 %}selected{% endif %}>25</option>
+                <option value="50" {% if per_page == 50 %}selected{% endif %}>50</option>
+                <option value="100" {% if per_page == 100 %}selected{% endif %}>100</option>
+                <option value="200" {% if per_page == 200 %}selected{% endif %}>200</option>
+            </select>
+        </div>
+
         <input type="text" id="search" name="search" value="{{ search_query }}" placeholder="🔍 Search by User ID or Name..." style="padding: 0.5rem 1rem; border: 1px solid #ddd; border-radius: 4px; width: 300px;">
-        
+
         <button type="submit" class="btn btn-primary">Filter</button>
         
         <a href="{% url 'outliers_list' %}" class="btn btn-secondary">Clear Filters</a>
@@ -102,7 +112,7 @@
                 </tr>
             </thead>
             <tbody id="outliersTable">
-                {% for outlier in outliers %}
+                {% for outlier in page_obj %}
                 <tr id="outlier-row-{{ outlier.id }}" {% if outlier.reviewed %}class="reviewed-row"{% endif %}>
                     <td style="text-align: center;">
                         {% if not outlier.reviewed %}
@@ -164,17 +174,17 @@
         </div>
         <div class="pagination-controls">
             {% if page_obj.has_previous %}
-                <a href="?page=1{% if selected_device %}&device={{ selected_device }}{% endif %}{% if reviewed_filter %}&reviewed={{ reviewed_filter }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}{% if search_query %}&search={{ search_query }}{% endif %}" class="btn btn-secondary btn-sm">« First</a>
-                <a href="?page={{ page_obj.previous_page_number }}{% if selected_device %}&device={{ selected_device }}{% endif %}{% if reviewed_filter %}&reviewed={{ reviewed_filter }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}{% if search_query %}&search={{ search_query }}{% endif %}" class="btn btn-secondary btn-sm">← Previous</a>
+                <a href="?page=1{% if selected_device %}&device={{ selected_device }}{% endif %}{% if reviewed_filter %}&reviewed={{ reviewed_filter }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}{% if search_query %}&search={{ search_query }}{% endif %}&per_page={{ per_page }}" class="btn btn-secondary btn-sm">« First</a>
+                <a href="?page={{ page_obj.previous_page_number }}{% if selected_device %}&device={{ selected_device }}{% endif %}{% if reviewed_filter %}&reviewed={{ reviewed_filter }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}{% if search_query %}&search={{ search_query }}{% endif %}&per_page={{ per_page }}" class="btn btn-secondary btn-sm">← Previous</a>
             {% endif %}
-            
+
             <span class="current-page">
                 Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
             </span>
-            
+
             {% if page_obj.has_next %}
-                <a href="?page={{ page_obj.next_page_number }}{% if selected_device %}&device={{ selected_device }}{% endif %}{% if reviewed_filter %}&reviewed={{ reviewed_filter }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}{% if search_query %}&search={{ search_query }}{% endif %}" class="btn btn-secondary btn-sm">Next →</a>
-                <a href="?page={{ page_obj.paginator.num_pages }}{% if selected_device %}&device={{ selected_device }}{% endif %}{% if reviewed_filter %}&reviewed={{ reviewed_filter }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}{% if search_query %}&search={{ search_query }}{% endif %}" class="btn btn-secondary btn-sm">Last »</a>
+                <a href="?page={{ page_obj.next_page_number }}{% if selected_device %}&device={{ selected_device }}{% endif %}{% if reviewed_filter %}&reviewed={{ reviewed_filter }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}{% if search_query %}&search={{ search_query }}{% endif %}&per_page={{ per_page }}" class="btn btn-secondary btn-sm">Next →</a>
+                <a href="?page={{ page_obj.paginator.num_pages }}{% if selected_device %}&device={{ selected_device }}{% endif %}{% if reviewed_filter %}&reviewed={{ reviewed_filter }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}{% if search_query %}&search={{ search_query }}{% endif %}&per_page={{ per_page }}" class="btn btn-secondary btn-sm">Last »</a>
             {% endif %}
         </div>
     </div>
