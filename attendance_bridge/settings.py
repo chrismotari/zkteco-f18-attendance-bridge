@@ -17,11 +17,15 @@ SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-change-this-in-prod
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DEBUG', 'True') == 'True'
 
+<<<<<<< HEAD
 # ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 ALLOWED_HOSTS = ['*']
 
 # Security Configuration
 SECURE_CROSS_ORIGIN_OPENER_POLICY = None
+=======
+ALLOWED_HOSTS = ['*']
+>>>>>>> main
 
 # Application definition
 INSTALLED_APPS = [
