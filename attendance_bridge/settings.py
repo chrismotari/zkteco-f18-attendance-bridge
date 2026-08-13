@@ -17,15 +17,8 @@ SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-change-this-in-prod
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DEBUG', 'True') == 'True'
 
-<<<<<<< HEAD
-# ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
-ALLOWED_HOSTS = ['*']
-
-# Security Configuration
-SECURE_CROSS_ORIGIN_OPENER_POLICY = None
-=======
-ALLOWED_HOSTS = ['*']
->>>>>>> main
+# ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', '192.168.1.6']
 
 # Application definition
 INSTALLED_APPS = [
@@ -100,6 +93,12 @@ AUTH_PASSWORD_VALIDATORS = [
         'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
     },
 ]
+
+AUTH_USER_MODEL = 'core.User'  # Use the custom user model
+
+LOGIN_URL = "login"
+LOGIN_REDIRECT_URL = "dashboard" # Redirect to dashboard after login
+LOGOUT_REDIRECT_URL = "login" # Redirect to login after logout
 
 # Internationalization
 LANGUAGE_CODE = 'en-us'
