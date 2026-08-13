@@ -18,10 +18,13 @@ CELERY_BEAT_SCHEDULE = {
         }
     },
     
-    # Process attendance hourly
+    # Process attendance every minute
     'process-attendance': {
         'task': 'core.process_attendance',
-        'schedule': crontab(minute=5),  # Run at 5 minutes past every hour
+        'schedule': 1 * 60.0,  # Every minute
+        'options': {
+            'expires': 1 * 60 - 5,  # Expire 5 seconds before next run
+        }
     },
     
     # Sync to CRM every 30 minutes
