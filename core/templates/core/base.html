@@ -298,17 +298,23 @@
         <div class="container">
             <h1>🕐 ZKTeco F18 Attendance Bridge System</h1>
             <nav>
-                <a href="{% url 'dashboard' %}">Dashboard</a>
-                <a href="{% url 'attendance_report' %}">Daily Report</a>
-                <a href="{% url 'outliers_list' %}">
-                    Outliers
-                    {% if unreviewed_outliers_count > 0 %}
-                        <span class="badge">{{ unreviewed_outliers_count }}</span>
-                    {% endif %}
-                </a>
-                <a href="{% url 'device_list' %}">Devices</a>
-                <a href="/admin/">Admin</a>
-                <a href="/api/">API</a>
+                {% if user.is_authenticated %}
+                    <a href="{% url 'dashboard' %}">Dashboard</a>
+                    <a href="{% url 'attendance_report' %}">Daily Report</a>
+                    <a href="{% url 'outliers_list' %}">
+                        Outliers
+                        {% if unreviewed_outliers_count > 0 %}
+                            <span class="badge">{{ unreviewed_outliers_count }}</span>
+                        {% endif %}
+                    </a>
+                    <a href="{% url 'device_list' %}">Devices</a>
+                    {% if user.is_staff %}<a href="/admin/">Admin</a>{% endif %}
+                    <a href="/api/">API</a>
+                    <span class="nav-user">{{ user.username }}</span>
+                    <a href="{% url 'logout' %}">Logout</a>
+                {% else %}
+                    <a href="{% url 'login' %}">Login</a>
+                {% endif %}
             </nav>
         </div>
         <div class="timezone-selector" style="float: right; margin-top: -40px;">
