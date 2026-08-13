@@ -1010,17 +1010,18 @@ def reprocess_attendance(request):
 
 def outliers_list(request):
     """
-    Display all outlier punches with filtering and review capabilities.
-    
-    Outlier punches are punches that fall outside the acceptable shift window.
-    This view allows reviewing, marking as reviewed, and deleting outliers.
+    Display outlier punch sessions with filtering and review capabilities.
+
+    Outlier punches are punches outside the acceptable shift window. This view
+    groups individual punches by (user, device, shift_date) and shows one row
+    per session: the first punch (clock_in) and last punch (clock_out).
     """
     from .models import OutlierPunch
-    from django.db.models import Subquery, OuterRef, CharField, Q
+    from django.db.models import Subquery, OuterRef, CharField, Q, F, DateTimeField
     from django.db.models.functions import Coalesce
-    from django .core.paginator import Paginator
+    from django.core.paginator import Paginator
     from datetime import datetime
-    
+
     # Get filters from request
     device_id = request.GET.get('device')
     reviewed_filter = request.GET.get('reviewed')  # 'true', 'false', or None (all)
@@ -1037,64 +1038,81 @@ def outliers_list(request):
             per_page = 50
     except (ValueError, TypeError):
         per_page = 50
-    
-    # Subquery to get user name from DeviceUser table
-    # Match by both user_id and device to handle cases where same user_id exists on multiple devices
-    # Prefer full_name, fall back to name, then user_id
+
+    # User name subqueries — prefer full_name, fall back to name, then user_id
     full_name_subquery = DeviceUser.objects.filter(
         user_id=OuterRef('user_id'),
         device=OuterRef('device')
     ).values('full_name')[:1]
-    
+
     name_subquery = DeviceUser.objects.filter(
         user_id=OuterRef('user_id'),
         device=OuterRef('device')
     ).values('name')[:1]
-    
-    # Base query with user name annotation
+
+    # For each punch, find the earliest and latest punch in its session
+    # (same user + device + shift_date) to derive clock_in and clock_out.
+    clock_in_sq = OutlierPunch.objects.filter(
+        user_id=OuterRef('user_id'),
+        device_id=OuterRef('device_id'),
+        associated_shift_date=OuterRef('associated_shift_date')
+    ).order_by('punch_datetime').values('punch_datetime')[:1]
+
+    clock_out_sq = OutlierPunch.objects.filter(
+        user_id=OuterRef('user_id'),
+        device_id=OuterRef('device_id'),
+        associated_shift_date=OuterRef('associated_shift_date')
+    ).order_by('-punch_datetime').values('punch_datetime')[:1]
+
+    # Annotate every punch with session clock_in/clock_out, then keep only
+    # the first punch per session — one row per (user, device, shift_date).
     outliers = OutlierPunch.objects.annotate(
         user_name_display=Coalesce(
             Subquery(full_name_subquery, output_field=CharField()),
             Subquery(name_subquery, output_field=CharField()),
             'user_id',
             output_field=CharField()
-        )
+        ),
+        clock_in=Subquery(clock_in_sq, output_field=DateTimeField()),
+        clock_out=Subquery(clock_out_sq, output_field=DateTimeField()),
+    ).filter(
+        punch_datetime=F('clock_in')  # one representative row per session
     )
-    
+
     # Apply filters
     if device_id:
         outliers = outliers.filter(device_id=device_id)
-    
+
     if reviewed_filter == 'true':
         outliers = outliers.filter(reviewed=True)
     elif reviewed_filter == 'false':
         outliers = outliers.filter(reviewed=False)
-    
+
+    # Filter by shift date (more accurate than filtering by raw punch timestamp)
     if date_from:
         try:
             date_from_obj = datetime.strptime(date_from, '%Y-%m-%d').date()
-            outliers = outliers.filter(punch_datetime__date__gte=date_from_obj)
+            outliers = outliers.filter(associated_shift_date__gte=date_from_obj)
         except ValueError:
             pass
-    
+
     if date_to:
         try:
             date_to_obj = datetime.strptime(date_to, '%Y-%m-%d').date()
-            outliers = outliers.filter(punch_datetime__date__lte=date_to_obj)
+            outliers = outliers.filter(associated_shift_date__lte=date_to_obj)
         except ValueError:
             pass
-    
+
     if search_query:
         outliers = outliers.filter(
             Q(user_id__icontains=search_query) |
-            Q(reason__icontains=search_query) |
             Q(user_id__in=DeviceUser.objects.filter(
                 Q(name__icontains=search_query) |
                 Q(full_name__icontains=search_query)
             ).values_list('user_id', flat=True))
         )
-    
-    # Order by punch_datetime descending (most recent first)
+
+    # Most recent session first
     outliers = outliers.select_related('device').order_by('-punch_datetime')
 
     # Paginate results
@@ -1143,11 +1161,16 @@ def outlier_mark_reviewed(request):
     
     try:
         outlier = OutlierPunch.objects.get(id=outlier_id)
-        outlier.reviewed = reviewed
+        # Mark all punches in the same session (user + device + shift_date)
+        OutlierPunch.objects.filter(
+            user_id=outlier.user_id,
+            device_id=outlier.device_id,
+            associated_shift_date=outlier.associated_shift_date
+        ).update(reviewed=reviewed)
         if notes:
             outlier.notes = notes
-        outlier.save()
-        
+            outlier.save()
+
         return JsonResponse({
             'success': True,
             'outlier_id': outlier_id,
@@ -1179,18 +1202,33 @@ def bulk_review_outliers(request):
         
         if not outlier_ids:
             return JsonResponse({'error': 'outlier_ids are required'}, status=400)
-        
-        # Update reviewed status
+
+        # Expand each ID to its full session group (user + device + shift_date)
+        groups = list(
+            OutlierPunch.objects.filter(id__in=outlier_ids)
+            .values('user_id', 'device_id', 'associated_shift_date')
+            .distinct()
+        )
+        group_filter = Q()
+        for g in groups:
+            group_filter |= Q(
+                user_id=g['user_id'],
+                device_id=g['device_id'],
+                associated_shift_date=g['associated_shift_date']
+            )
+
         update_fields = {'reviewed': reviewed}
         if notes:
             update_fields['notes'] = notes
-        
-        updated_count = OutlierPunch.objects.filter(id__in=outlier_ids).update(**update_fields)
-        
+
+        if group_filter:
+            OutlierPunch.objects.filter(group_filter).update(**update_fields)
+
+        session_count = len(groups)
         return JsonResponse({
-            'success': True, 
-            'updated_count': updated_count, 
-            'message': f"{updated_count} outliers marked as {'reviewed' if reviewed else 'unreviewed'}"
+            'success': True,
+            'updated_count': session_count,
+            'message': f"{session_count} outlier session(s) marked as {'reviewed' if reviewed else 'unreviewed'}"
         })
     except Exception as e:
         logger.error(f"Error bulk updating outliers: {str(e)}")
@@ -1210,8 +1248,13 @@ def outlier_delete(request):
     
     try:
         outlier = OutlierPunch.objects.get(id=outlier_id)
-        outlier.delete()
-        
+        # Delete all punches in the same session (user + device + shift_date)
+        OutlierPunch.objects.filter(
+            user_id=outlier.user_id,
+            device_id=outlier.device_id,
+            associated_shift_date=outlier.associated_shift_date
+        ).delete()
+
         return JsonResponse({'success': True, 'outlier_id': outlier_id})
     except OutlierPunch.DoesNotExist:
         return JsonResponse({'error': 'Outlier punch not found'}, status=404)
@@ -1239,6 +1282,192 @@ def bulk_delete_outliers(request):
     except Exception as e:
         logger.error(f"Error bulk deleting outliers: {str(e)}")
         return JsonResponse({'error': str(e)}, status=500)
+
+
+@require_http_methods(["GET"])
+def outlier_session_punches(request):
+    """Return all individual punch times for a session identified by a representative outlier ID."""
+    from .models import OutlierPunch
+    outlier_id = request.GET.get('id')
+    try:
+        rep = OutlierPunch.objects.select_related('device').get(id=outlier_id)
+    except (OutlierPunch.DoesNotExist, ValueError, TypeError):
+        return JsonResponse({'error': 'Not found'}, status=404)
+
+    punches = OutlierPunch.objects.filter(
+        user_id=rep.user_id,
+        device_id=rep.device_id,
+        associated_shift_date=rep.associated_shift_date
+    ).order_by('punch_datetime')
+
+    tz = pytz.timezone(rep.device.timezone)
+    result = []
+    prev_local = None
+    for punch in punches:
+        local_dt = punch.punch_datetime.astimezone(tz)
+        duration = None
+        if prev_local:
+            delta = local_dt - prev_local
+            total_secs = int(delta.total_seconds())
+            h, rem = divmod(total_secs, 3600)
+            m, s = divmod(rem, 60)
+            duration = f"{h:02d}:{m:02d}:{s:02d}"
+        result.append({
+            'punch_time': local_dt.strftime('%Y-%m-%d %H:%M:%S'),
+            'duration_since_prev': duration,
+        })
+        prev_local = local_dt
+
+    return JsonResponse({'punches': result, 'count': len(result)})
+
+
+def user_detail(request, user_id):
+    """
+    Universal user detail page.
+    Shows profile, attendance history and outlier sessions for any user.
+    Accessible from the outliers list, attendance report, and device users list.
+    """
+    from .models import DeviceUser, ProcessedAttendance, OutlierPunch
+    from django.db.models import Subquery, OuterRef, CharField, F, DateTimeField
+    from django.db.models.functions import Coalesce
+    from datetime import datetime, timedelta
+
+    today = timezone.now().date()
+
+    # Optional date range — default to last 30 days
+    date_from_str = request.GET.get('date_from', (today - timedelta(days=30)).strftime('%Y-%m-%d'))
+    date_to_str   = request.GET.get('date_to',   today.strftime('%Y-%m-%d'))
+
+    try:
+        date_from_obj = datetime.strptime(date_from_str, '%Y-%m-%d').date()
+    except ValueError:
+        date_from_obj = today - timedelta(days=30)
+
+    try:
+        date_to_obj = datetime.strptime(date_to_str, '%Y-%m-%d').date()
+    except ValueError:
+        date_to_obj = today
+
+    # User profile
+    device_user = (
+        DeviceUser.objects.select_related('device')
+        .filter(user_id=user_id)
+        .first()
+    )
+    user_name = device_user.display_name if device_user else user_id
+    device    = device_user.device if device_user else None
+
+    # Processed attendance records within date range
+    attendance_qs = (
+        ProcessedAttendance.objects
+        .filter(user_id=user_id, shift_date__gte=date_from_obj, shift_date__lte=date_to_obj)
+        .select_related('device')
+        .order_by('-shift_date')
+    )
+
+    total_days        = attendance_qs.count()
+    late_count        = attendance_qs.filter(is_late_arrival=True).count()
+    early_count       = attendance_qs.filter(is_early_departure=True).count()
+    incomplete_count  = attendance_qs.filter(is_incomplete=True).count()
+
+    # Outlier sessions within date range (one row per session via subquery dedup)
+    clock_in_sq = OutlierPunch.objects.filter(
+        user_id=OuterRef('user_id'),
+        device_id=OuterRef('device_id'),
+        associated_shift_date=OuterRef('associated_shift_date'),
+    ).order_by('punch_datetime').values('punch_datetime')[:1]
+
+    clock_out_sq = OutlierPunch.objects.filter(
+        user_id=OuterRef('user_id'),
+        device_id=OuterRef('device_id'),
+        associated_shift_date=OuterRef('associated_shift_date'),
+    ).order_by('-punch_datetime').values('punch_datetime')[:1]
+
+    outlier_sessions = (
+        OutlierPunch.objects
+        .filter(
+            user_id=user_id,
+            associated_shift_date__gte=date_from_obj,
+            associated_shift_date__lte=date_to_obj,
+        )
+        .annotate(
+            clock_in=Subquery(clock_in_sq, output_field=DateTimeField()),
+            clock_out=Subquery(clock_out_sq, output_field=DateTimeField()),
+        )
+        .filter(punch_datetime=F('clock_in'))
+        .select_related('device')
+        .order_by('-punch_datetime')
+    )
+    outlier_count = outlier_sessions.count()
+
+    context = {
+        'user_id':          user_id,
+        'user_name':        user_name,
+        'device_user':      device_user,
+        'device':           device,
+        'attendance_records': attendance_qs,
+        'outlier_sessions': outlier_sessions,
+        'total_days':       total_days,
+        'late_count':       late_count,
+        'early_count':      early_count,
+        'incomplete_count': incomplete_count,
+        'outlier_count':    outlier_count,
+        'date_from':        date_from_str,
+        'date_to':          date_to_str,
+    }
+    return render(request, 'core/user_detail.html', context)
+
+
+def outlier_session_detail(request, outlier_id):
+    """
+    Detail page for an outlier session.
+    Shows the user's regular processed attendance alongside their outlier punches,
+    categorised into Before Shift and After Shift.
+    """
+    from .models import OutlierPunch, ProcessedAttendance
+    from django.shortcuts import get_object_or_404
+
+    rep = get_object_or_404(OutlierPunch.objects.select_related('device'), id=outlier_id)
+
+    # Resolve display name
+    try:
+        du = DeviceUser.objects.get(user_id=rep.user_id, device=rep.device)
+        user_name = du.full_name or du.name or rep.user_id
+    except DeviceUser.DoesNotExist:
+        user_name = rep.user_id
+
+    # All individual outlier punches for this session
+    all_punches = list(
+        OutlierPunch.objects.filter(
+            user_id=rep.user_id,
+            device_id=rep.device_id,
+            associated_shift_date=rep.associated_shift_date,
+        ).select_related('device').order_by('punch_datetime')
+    )
+
+    # Regular processed attendance record for this user/shift-date (may not exist)
+    processed = ProcessedAttendance.objects.filter(
+        user_id=rep.user_id,
+        device_id=rep.device_id,
+        shift_date=rep.associated_shift_date,
+    ).first()
+
+    # Categorise outlier punches by whether they fall before or after the shift window
+    before_shift = [p for p in all_punches if 'early' in p.reason.lower() or 'before' in p.reason.lower()]
+    after_shift  = [p for p in all_punches if 'late'  in p.reason.lower() or 'after'  in p.reason.lower()]
+    uncategorised = [p for p in all_punches if p not in before_shift and p not in after_shift]
+
+    context = {
+        'rep': rep,
+        'user_name': user_name,
+        'processed': processed,
+        'before_shift': before_shift,
+        'after_shift': after_shift,
+        'uncategorised': uncategorised,
+        'total_outlier_punches': len(all_punches),
+    }
+    return render(request, 'core/outlier_session_detail.html', context)
+
 
 @csrf_exempt
 @require_http_methods(["POST"])
