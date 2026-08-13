@@ -1,0 +1,265 @@
+{% extends "core/base.html" %}
+{% load timezone_filters %}
+
+{% block title %}{{ user_name }} — Attendance Detail{% endblock %}
+
+{% block extra_css %}
+<style>
+    .profile-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+        gap: 1rem;
+        margin-top: 1rem;
+    }
+
+    .profile-item label {
+        display: block;
+        font-size: 0.78rem;
+        color: #7f8c8d;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        margin-bottom: 0.2rem;
+    }
+
+    .profile-item span {
+        font-size: 1rem;
+        font-weight: 600;
+        color: #2c3e50;
+    }
+
+    .section-title {
+        font-size: 1rem;
+        font-weight: 600;
+        color: #2c3e50;
+        padding-bottom: 0.5rem;
+        border-bottom: 2px solid #ecf0f1;
+        margin-bottom: 1rem;
+    }
+
+    .flag-pill {
+        display: inline-block;
+        padding: 0.2rem 0.55rem;
+        border-radius: 10px;
+        font-size: 0.72rem;
+        font-weight: 600;
+    }
+
+    .flag-late     { background: #fff3cd; color: #856404; }
+    .flag-early    { background: #fde8e8; color: #721c24; }
+    .flag-incomplete { background: #e2e3e5; color: #383d41; }
+    .flag-normal   { background: #d4edda; color: #155724; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- Back navigation -->
+<div style="margin-bottom: 1rem;">
+    <a href="javascript:history.back()" class="btn btn-secondary">← Back</a>
+</div>
+
+<!-- User Profile -->
+<div class="card">
+    <h2>👤 {{ user_name }}</h2>
+    <div class="profile-grid">
+        <div class="profile-item">
+            <label>Employee ID</label>
+            <span>{{ user_id }}</span>
+        </div>
+        {% if device_user %}
+        <div class="profile-item">
+            <label>Device</label>
+            <span>{{ device_user.device.name }}</span>
+        </div>
+        {% if device_user.card_no %}
+        <div class="profile-item">
+            <label>Card No</label>
+            <span>{{ device_user.card_no }}</span>
+        </div>
+        {% endif %}
+        {% if device_user.group_id %}
+        <div class="profile-item">
+            <label>Group</label>
+            <span>{{ device_user.group_id }}</span>
+        </div>
+        {% endif %}
+        {% endif %}
+    </div>
+</div>
+
+<!-- Date range filter -->
+<div class="card">
+    <form method="get" class="filter-form">
+        <div>
+            <label for="date_from">From:</label>
+            <input type="date" id="date_from" name="date_from" value="{{ date_from }}">
+        </div>
+        <div>
+            <label for="date_to">To:</label>
+            <input type="date" id="date_to" name="date_to" value="{{ date_to }}">
+        </div>
+        <button type="submit" class="btn btn-primary">Filter</button>
+        <a href="{% url 'user_detail' user_id %}" class="btn btn-secondary">Reset</a>
+    </form>
+</div>
+
+<!-- Stats -->
+<div class="stats">
+    <div class="stat-box">
+        <div class="stat-label">Days Present</div>
+        <div class="stat-value">{{ total_days }}</div>
+    </div>
+    <div class="stat-box {% if late_count > 0 %}warning{% else %}success{% endif %}">
+        <div class="stat-label">Late Arrivals</div>
+        <div class="stat-value">{{ late_count }}</div>
+    </div>
+    <div class="stat-box {% if early_count > 0 %}warning{% else %}success{% endif %}">
+        <div class="stat-label">Early Departures</div>
+        <div class="stat-value">{{ early_count }}</div>
+    </div>
+    <div class="stat-box {% if incomplete_count > 0 %}danger{% else %}success{% endif %}">
+        <div class="stat-label">Incomplete</div>
+        <div class="stat-value">{{ incomplete_count }}</div>
+    </div>
+    <div class="stat-box {% if outlier_count > 0 %}warning{% else %}success{% endif %}">
+        <div class="stat-label">Outlier Sessions</div>
+        <div class="stat-value">{{ outlier_count }}</div>
+    </div>
+</div>
+
+<!-- Attendance History -->
+<div class="card">
+    <div class="section-title">Attendance History</div>
+
+    {% if attendance_records %}
+    <div style="overflow-x: auto;">
+        <table>
+            <thead>
+                <tr>
+                    <th>Shift Date</th>
+                    <th>Device</th>
+                    <th>Clock In</th>
+                    <th>Clock Out</th>
+                    <th>Hours</th>
+                    <th>Punches</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for rec in attendance_records %}
+                <tr>
+                    <td><strong>{{ rec.shift_date|date:'Y-m-d'|default:rec.date|date:'Y-m-d' }}</strong></td>
+                    <td>{{ rec.device.name }}</td>
+                    <td>
+                        {% with ci=rec.earliest_punch|default:rec.clock_in %}
+                        {% if ci %}
+                            <span style="color: #27ae60; font-weight: 600;">
+                                {{ ci|timezone:rec.device.timezone|date:'H:i:s' }}
+                            </span>
+                        {% else %}
+                            <span style="color: #95a5a6;">—</span>
+                        {% endif %}
+                        {% endwith %}
+                    </td>
+                    <td>
+                        {% with co=rec.latest_punch|default:rec.clock_out %}
+                        {% if co %}
+                            <span style="color: #e74c3c; font-weight: 600;">
+                                {{ co|timezone:rec.device.timezone|date:'H:i:s' }}
+                            </span>
+                        {% else %}
+                            <span style="color: #95a5a6;">—</span>
+                        {% endif %}
+                        {% endwith %}
+                    </td>
+                    <td>
+                        {% if rec.hours_worked %}
+                            {{ rec.hours_worked|floatformat:1 }}h
+                        {% else %}
+                            <span style="color: #95a5a6;">—</span>
+                        {% endif %}
+                    </td>
+                    <td style="color: #7f8c8d;">{{ rec.punch_count }}</td>
+                    <td>
+                        {% if rec.is_incomplete %}
+                            <span class="flag-pill flag-incomplete">Incomplete</span>
+                        {% elif rec.is_late_arrival and rec.is_early_departure %}
+                            <span class="flag-pill flag-late">Late</span>
+                            <span class="flag-pill flag-early">Early Out</span>
+                        {% elif rec.is_late_arrival %}
+                            <span class="flag-pill flag-late">Late</span>
+                        {% elif rec.is_early_departure %}
+                            <span class="flag-pill flag-early">Early Out</span>
+                        {% else %}
+                            <span class="flag-pill flag-normal">Normal</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p style="color: #7f8c8d; padding: 1rem 0;">No attendance records found for this period.</p>
+    {% endif %}
+</div>
+
+<!-- Outlier Sessions -->
+<div class="card">
+    <div class="section-title">Outlier Sessions</div>
+
+    {% if outlier_sessions %}
+    <div style="overflow-x: auto;">
+        <table>
+            <thead>
+                <tr>
+                    <th>Shift Date</th>
+                    <th>Device</th>
+                    <th>Clock In</th>
+                    <th>Clock Out</th>
+                    <th>Reason</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for session in outlier_sessions %}
+                <tr>
+                    <td><strong>{{ session.associated_shift_date|date:'Y-m-d'|default:"—" }}</strong></td>
+                    <td>{{ session.device.name }}</td>
+                    <td>
+                        <span style="color: #27ae60; font-weight: 600;">
+                            {{ session.clock_in|timezone:session.device.timezone|date:'H:i:s' }}
+                        </span>
+                    </td>
+                    <td>
+                        {% if session.clock_out == session.clock_in %}
+                            <span style="color: #95a5a6;">—</span>
+                        {% else %}
+                            <span style="color: #e74c3c; font-weight: 600;">
+                                {{ session.clock_out|timezone:session.device.timezone|date:'H:i:s' }}
+                            </span>
+                        {% endif %}
+                    </td>
+                    <td style="max-width: 220px;"><small>{{ session.reason }}</small></td>
+                    <td>
+                        {% if session.reviewed %}
+                            <span class="badge badge-success">✓ Reviewed</span>
+                        {% else %}
+                            <span class="badge badge-warning">⚠ Pending</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <a href="{% url 'outlier_session_detail' session.id %}" class="btn btn-secondary btn-sm">Details</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p style="color: #7f8c8d; padding: 1rem 0;">No outlier sessions found for this period.</p>
+    {% endif %}
+</div>
+
+{% endblock %}

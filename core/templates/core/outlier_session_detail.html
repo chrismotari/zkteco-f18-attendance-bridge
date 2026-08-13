@@ -1,0 +1,324 @@
+{% extends "core/base.html" %}
+{% load timezone_filters %}
+
+{% block title %}Outlier Detail — {{ user_name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .section-heading {
+        font-size: 1rem;
+        font-weight: 600;
+        color: #2c3e50;
+        margin-bottom: 1rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 2px solid #ecf0f1;
+    }
+
+    .detail-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 1rem;
+        margin-bottom: 1rem;
+    }
+
+    .detail-item label {
+        display: block;
+        font-size: 0.8rem;
+        color: #7f8c8d;
+        margin-bottom: 0.2rem;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+    }
+
+    .detail-item span {
+        font-size: 1rem;
+        font-weight: 600;
+        color: #2c3e50;
+    }
+
+    .punch-category {
+        margin-bottom: 1.5rem;
+    }
+
+    .punch-category-title {
+        font-size: 0.85rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 0.6rem;
+        padding: 0.3rem 0.7rem;
+        border-radius: 4px;
+        display: inline-block;
+    }
+
+    .punch-category-title.before {
+        background: #fff3cd;
+        color: #856404;
+    }
+
+    .punch-category-title.after {
+        background: #f8d7da;
+        color: #721c24;
+    }
+
+    .punch-category-title.other {
+        background: #e2e3e5;
+        color: #383d41;
+    }
+
+    .flag-row {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+        margin-top: 0.5rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- Back navigation -->
+<div style="margin-bottom: 1rem; display: flex; gap: 0.5rem;">
+    <a href="{% url 'user_detail' rep.user_id %}" class="btn btn-secondary">← User Profile</a>
+    <a href="{% url 'outliers_list' %}" class="btn btn-secondary">Outliers List</a>
+</div>
+
+<!-- Session header -->
+<div class="card">
+    <h2>⚠️ Outlier Session Detail</h2>
+    <div class="detail-grid" style="margin-top: 1rem;">
+        <div class="detail-item">
+            <label>Employee</label>
+            <span>{{ user_name }}</span><br>
+            <small style="color: #7f8c8d;">ID: {{ rep.user_id }}</small>
+        </div>
+        <div class="detail-item">
+            <label>Device</label>
+            <span>{{ rep.device.name }}</span>
+        </div>
+        <div class="detail-item">
+            <label>Shift Date</label>
+            <span>{{ rep.associated_shift_date|date:'Y-m-d'|default:"—" }}</span>
+        </div>
+        <div class="detail-item">
+            <label>Outlier Punches</label>
+            <span>{{ total_outlier_punches }}</span>
+        </div>
+        <div class="detail-item">
+            <label>Review Status</label>
+            <span>
+                {% if rep.reviewed %}
+                    <span class="badge badge-success">✓ Reviewed</span>
+                {% else %}
+                    <span class="badge badge-warning">⚠ Pending</span>
+                {% endif %}
+            </span>
+        </div>
+    </div>
+</div>
+
+<!-- Statistics -->
+<div class="stats">
+    {% if processed %}
+    <div class="stat-box">
+        <div class="stat-label">Shift Window</div>
+        <div class="stat-value" style="font-size: 1.2rem;">
+            {{ processed.shift_start_time|time:'H:i' }} – {{ processed.shift_end_time|time:'H:i' }}
+        </div>
+    </div>
+    <div class="stat-box success">
+        <div class="stat-label">Clock In (Regular)</div>
+        <div class="stat-value" style="font-size: 1.2rem;">
+            {% if processed.earliest_punch %}
+                {{ processed.earliest_punch|timezone:rep.device.timezone|date:'H:i:s' }}
+            {% else %}—{% endif %}
+        </div>
+    </div>
+    <div class="stat-box {% if processed.is_early_departure %}warning{% else %}success{% endif %}">
+        <div class="stat-label">Clock Out (Regular)</div>
+        <div class="stat-value" style="font-size: 1.2rem;">
+            {% if processed.latest_punch %}
+                {{ processed.latest_punch|timezone:rep.device.timezone|date:'H:i:s' }}
+            {% else %}—{% endif %}
+        </div>
+    </div>
+    {% endif %}
+    <div class="stat-box warning">
+        <div class="stat-label">Before Shift</div>
+        <div class="stat-value">{{ before_shift|length }}</div>
+    </div>
+    <div class="stat-box danger">
+        <div class="stat-label">After Shift</div>
+        <div class="stat-value">{{ after_shift|length }}</div>
+    </div>
+</div>
+
+<!-- Regular Attendance -->
+{% if processed %}
+<div class="card">
+    <div class="section-heading">Regular Attendance (Within Shift Window)</div>
+
+    <div class="detail-grid">
+        <div class="detail-item">
+            <label>Shift Start</label>
+            <span>{{ processed.shift_start_time|time:'H:i' }}</span>
+        </div>
+        <div class="detail-item">
+            <label>Shift End</label>
+            <span>{{ processed.shift_end_time|time:'H:i' }}</span>
+        </div>
+        <div class="detail-item">
+            <label>First Punch</label>
+            <span style="color: #27ae60;">
+                {% if processed.earliest_punch %}
+                    {{ processed.earliest_punch|timezone:rep.device.timezone|date:'H:i:s' }}
+                {% else %}—{% endif %}
+            </span>
+        </div>
+        <div class="detail-item">
+            <label>Last Punch</label>
+            <span style="color: #e74c3c;">
+                {% if processed.latest_punch %}
+                    {{ processed.latest_punch|timezone:rep.device.timezone|date:'H:i:s' }}
+                {% else %}—{% endif %}
+            </span>
+        </div>
+        <div class="detail-item">
+            <label>In-Window Punches</label>
+            <span>{{ processed.punch_count }}</span>
+        </div>
+        {% if processed.hours_worked %}
+        <div class="detail-item">
+            <label>Hours Worked</label>
+            <span>{{ processed.hours_worked }}h</span>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="flag-row">
+        {% if processed.is_late_arrival %}
+            <span class="badge badge-warning">⏰ Late Arrival</span>
+        {% endif %}
+        {% if processed.is_early_departure %}
+            <span class="badge badge-warning">🚪 Early Departure</span>
+        {% endif %}
+        {% if processed.is_incomplete %}
+            <span class="badge badge-danger">⚠ Incomplete Record</span>
+        {% endif %}
+        {% if not processed.is_late_arrival and not processed.is_early_departure and not processed.is_incomplete %}
+            <span class="badge badge-success">✓ Normal</span>
+        {% endif %}
+    </div>
+
+    {% if processed.notes %}
+    <p style="margin-top: 1rem; color: #7f8c8d; font-size: 0.9rem;">{{ processed.notes }}</p>
+    {% endif %}
+</div>
+{% else %}
+<div class="card">
+    <div class="section-heading">Regular Attendance (Within Shift Window)</div>
+    <p style="color: #7f8c8d; padding: 1rem 0;">
+        No in-window punches recorded for this shift date — all punches were outside the shift window.
+    </p>
+</div>
+{% endif %}
+
+<!-- Outlier Punches -->
+<div class="card">
+    <div class="section-heading">Outlier Punches (Outside Shift Window)</div>
+
+    {% if before_shift %}
+    <div class="punch-category">
+        <div class="punch-category-title before">⬆ Before Shift — arrived too early ({{ before_shift|length }} punch{{ before_shift|length|pluralize }})</div>
+        <table>
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Punch Time</th>
+                    <th>Reason</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for punch in before_shift %}
+                <tr>
+                    <td style="color: #7f8c8d;">{{ forloop.counter }}</td>
+                    <td>
+                        <strong>{{ punch.punch_datetime|timezone:rep.device.timezone|date:'H:i:s' }}</strong>
+                        <small style="color: #7f8c8d; display: block;">{{ punch.punch_datetime|timezone:rep.device.timezone|date:'Y-m-d' }}</small>
+                    </td>
+                    <td><small>{{ punch.reason }}</small></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    {% if after_shift %}
+    <div class="punch-category">
+        <div class="punch-category-title after">⬇ After Shift — left too late ({{ after_shift|length }} punch{{ after_shift|length|pluralize }})</div>
+        <table>
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Punch Time</th>
+                    <th>Reason</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for punch in after_shift %}
+                <tr>
+                    <td style="color: #7f8c8d;">{{ forloop.counter }}</td>
+                    <td>
+                        <strong>{{ punch.punch_datetime|timezone:rep.device.timezone|date:'H:i:s' }}</strong>
+                        <small style="color: #7f8c8d; display: block;">{{ punch.punch_datetime|timezone:rep.device.timezone|date:'Y-m-d' }}</small>
+                    </td>
+                    <td><small>{{ punch.reason }}</small></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    {% if uncategorised %}
+    <div class="punch-category">
+        <div class="punch-category-title other">Other ({{ uncategorised|length }} punch{{ uncategorised|length|pluralize }})</div>
+        <table>
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Punch Time</th>
+                    <th>Reason</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for punch in uncategorised %}
+                <tr>
+                    <td style="color: #7f8c8d;">{{ forloop.counter }}</td>
+                    <td>
+                        <strong>{{ punch.punch_datetime|timezone:rep.device.timezone|date:'H:i:s' }}</strong>
+                        <small style="color: #7f8c8d; display: block;">{{ punch.punch_datetime|timezone:rep.device.timezone|date:'Y-m-d' }}</small>
+                    </td>
+                    <td><small>{{ punch.reason }}</small></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    {% if not before_shift and not after_shift and not uncategorised %}
+    <p style="color: #7f8c8d; padding: 1rem 0;">No individual punch records found for this session.</p>
+    {% endif %}
+</div>
+
+<!-- Notes -->
+{% if rep.notes %}
+<div class="card">
+    <div class="section-heading">Notes</div>
+    <p>{{ rep.notes }}</p>
+</div>
+{% endif %}
+
+{% endblock %}
