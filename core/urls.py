@@ -27,6 +27,9 @@ from .views import (
     outliers_list,
     outlier_mark_reviewed,
     outlier_delete,
+    outlier_session_punches,
+    outlier_session_detail,
+    user_detail,
     set_user_timezone,
     get_user_timezone
 )
@@ -66,6 +69,10 @@ urlpatterns = [
     path('outliers/mark-reviewed/', outlier_mark_reviewed, name='outlier_mark_reviewed'),
     path('outliers/bulk-mark-reviewed/', bulk_review_outliers, name='bulk_review_outliers'),
     path('outliers/delete/', outlier_delete, name='outlier_delete'),
+    path('outliers/session-punches/', outlier_session_punches, name='outlier_session_punches'),
+    path('outliers/<int:outlier_id>/', outlier_session_detail, name='outlier_session_detail'),
+    path('users/<str:user_id>/', user_detail, name='user_detail'),
+
 
     # timezone
     path('set-timezone/', set_user_timezone, name='set_timezone'),
