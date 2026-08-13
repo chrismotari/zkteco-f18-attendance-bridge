@@ -130,7 +130,11 @@
         <tbody>
             {% for attendance in attendances %}
             <tr>
-                <td><strong>{{ attendance.user_name_display }}</strong></td>
+                <td>
+                    <a href="{% url 'user_detail' attendance.user_id %}" style="text-decoration: none; color: inherit;">
+                        <strong>{{ attendance.user_name_display }}</strong>
+                    </a>
+                </td>
                 <td>{{ attendance.device.name }}</td>
                 <td>
                     {% if attendance.clock_in %}
