@@ -8,8 +8,15 @@ This module defines the database models for:
 """
 from django.db import models
 from django.utils import timezone
+from django.contrib.auth.models import AbstractUser
 
 
+class User(AbstractUser):
+    """
+    Custom user model extending Django AbstactUser.
+    Additional field can be added here if needed in the future
+    """
+    pass
 class Device(models.Model):
     """
     Represents a ZKTeco attendance device.
