@@ -181,7 +181,11 @@
                     <input type="checkbox" class="user-checkbox" value="{{ user.user_id }}" onchange="updateSelectedCount()">
                 </td>
                 <td>{{ user.user_id }}</td>
-                <td>{{ user.name }}</td>
+                <td>
+                    <a href="{% url 'user_detail' user.user_id %}" style="text-decoration: none; color: inherit;">
+                        {{ user.name }}
+                    </a>
+                </td>
                 <td>{{ user.card_no|default:"-" }}</td>
                 <td>{{ user.privilege }}</td>
                 <td>
