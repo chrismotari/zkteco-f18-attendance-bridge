@@ -62,7 +62,7 @@ When displaying timestamps in templates:
 
 The display timezone is configured in `settings.py`:
 ```python
-DISPLAY_TIMEZONE = 'Africa/Nairobi'  # Can be changed via environment variable
+DISPLAY_TIMEZONE = "Africa/Nairobi"  # Can be changed via environment variable
 ```
 
 **Example:**

@@ -1,0 +1,40 @@
+extend-exclude = ["**/migrations/"]
+line-length = 100
+
+[format]
+docstring-code-format = true
+line-ending = "lf"
+skip-magic-trailing-comma = true
+
+[lint]
+select = ["ALL"]
+ignore = [
+    # Rules that contradict other "superior" rules:
+    "D203",  # contradicts D211
+    "D212",  # contradicts D213
+
+    # Rules that contradict the ruff formatter:
+    "COM812",
+
+    # Rulesets that aren't applicable
+    "ANN",
+    "D",
+    "TD",
+
+    # Rules that aren't applicable
+    "DJ008",
+    "SLF001",
+    "FBT002",
+    "S105",
+    "FIX002",
+    "S106",
+    "ARG002",
+    "PLR0915",
+    "DJ012",
+    "ARG001",
+    "RUF012",
+    "CPY001",
+]
+
+[lint.isort]
+split-on-trailing-comma = false

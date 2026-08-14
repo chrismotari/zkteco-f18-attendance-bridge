@@ -280,6 +280,7 @@ python manage.py loaddata backup.json
 ### Date Range Queries
 ```python
 from datetime import date, timedelta
+
 start = date.today() - timedelta(days=7)
 end = date.today()
 records = ProcessedAttendance.objects.filter(date__gte=start, date__lte=end)
@@ -287,7 +288,7 @@ records = ProcessedAttendance.objects.filter(date__gte=start, date__lte=end)
 
 ### User Queries
 ```python
-user_records = ProcessedAttendance.objects.filter(user_id='EMP001').order_by('-date')
+user_records = ProcessedAttendance.objects.filter(user_id="EMP001").order_by("-date")
 ```
 
 ### Outlier Analysis

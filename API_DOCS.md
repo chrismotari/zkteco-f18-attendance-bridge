@@ -318,23 +318,14 @@ import requests
 API_URL = "http://localhost:8000/api/"
 TOKEN = "your-token-here"
 
-headers = {
-    "Authorization": f"Token {TOKEN}",
-    "Content-Type": "application/json"
-}
+headers = {"Authorization": f"Token {TOKEN}", "Content-Type": "application/json"}
 
 # Get unsynced attendance
-response = requests.get(
-    f"{API_URL}processed-attendance/unsynced/",
-    headers=headers
-)
+response = requests.get(f"{API_URL}processed-attendance/unsynced/", headers=headers)
 data = response.json()
 
 # Poll devices
-response = requests.post(
-    f"{API_URL}devices/poll_all/",
-    headers=headers
-)
+response = requests.post(f"{API_URL}devices/poll_all/", headers=headers)
 result = response.json()
 print(f"Polled {result['total_devices']} devices")
 ```

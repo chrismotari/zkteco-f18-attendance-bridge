@@ -1,0 +1,4 @@
+-r requirements.txt
+
+# Linting
+ruff>=0.16.0

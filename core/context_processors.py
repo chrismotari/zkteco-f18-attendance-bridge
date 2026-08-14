@@ -1,6 +1,7 @@
 """
 Context processors to add global variables to all templates.
 """
+
 from .models import OutlierPunch
 
 
@@ -12,7 +13,5 @@ def outlier_count(request):
         count = OutlierPunch.objects.filter(reviewed=False).count()
     except Exception:
         count = 0
-    
-    return {
-        'unreviewed_outliers_count': count
-    }
+
+    return {"unreviewed_outliers_count": count}

@@ -11,6 +11,6 @@ import os
 
 from django.core.wsgi import get_wsgi_application
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'attendance_bridge.settings')
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "attendance_bridge.settings")
 
 application = get_wsgi_application()

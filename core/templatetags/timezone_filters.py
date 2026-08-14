@@ -14,40 +14,39 @@ def localtime(value):
     Usage: {{ timestamp|localtime }}
     """
     if not value:
-        return ''
-    
+        return ""
+
     if not isinstance(value, datetime):
         return value
-    
+
     # Get display timezone from settings
     # display_tz = pytz.timezone(settings.DISPLAY_TIMEZONE)
 
-    current_tz =  django_timezone.get_current_timezone()
+    current_tz = django_timezone.get_current_timezone()
 
-    
     # If the datetime is naive, assume it's UTC
     if value.tzinfo is None:
         utc_time = pytz.utc.localize(value)
     else:
         utc_time = value
-    
+
     # Convert to display timezone
     # local_time = utc_time.astimezone(display_tz)
     local_time = utc_time.astimezone(current_tz)
-    
+
     return local_time
 
 
 @register.filter
-def format_datetime(value, format_string='%Y-%m-%d %H:%M:%S'):
+def format_datetime(value, format_string="%Y-%m-%d %H:%M:%S"):
     """
     Format a datetime in the display timezone.
     Usage: {{ timestamp|format_datetime }}
     """
     local_time = localtime(value)
     if not local_time:
-        return ''
-    
+        return ""
+
     return local_time.strftime(format_string)
 
 
@@ -59,9 +58,9 @@ def format_date(value):
     """
     local_time = localtime(value)
     if not local_time:
-        return ''
-    
-    return local_time.strftime('%Y-%m-%d')
+        return ""
+
+    return local_time.strftime("%Y-%m-%d")
 
 
 @register.filter
@@ -72,9 +71,9 @@ def format_time(value):
     """
     local_time = localtime(value)
     if not local_time:
-        return ''
-    
-    return local_time.strftime('%H:%M:%S')
+        return ""
+
+    return local_time.strftime("%H:%M:%S")
 
 
 @register.filter
@@ -84,26 +83,27 @@ def timezone(value, tz_name):
     Usage: {{ timestamp|timezone:"Africa/Nairobi" }}
     """
     if not value:
-        return ''
-    
+        return ""
+
     if not isinstance(value, datetime):
         return value
-    
+
     try:
         target_tz = pytz.timezone(tz_name)
     except pytz.UnknownTimeZoneError:
         return value
-    
+
     # If the datetime is naive, assume it's UTC
     if value.tzinfo is None:
         utc_time = pytz.utc.localize(value)
     else:
         utc_time = value
-    
+
     # Convert to target timezone
     local_time = utc_time.astimezone(target_tz)
-    
+
     return local_time
+
 
 @register.simple_tag
 def get_current_timezone():
@@ -118,11 +118,11 @@ def convert_to_user_tz(value, user_timezone=None):
     Usage: {{ timestamp|convert_to_user_tz }}
     """
     if not value:
-        return ''
-    
+        return ""
+
     if not isinstance(value, datetime):
         return value
-    
+
     # Get user timezone from context or use active
     if user_timezone:
         try:
@@ -131,14 +131,14 @@ def convert_to_user_tz(value, user_timezone=None):
             target_tz = django_timezone.get_current_timezone()
     else:
         target_tz = django_timezone.get_current_timezone()
-    
+
     # If the datetime is naive, assume it's UTC
     if value.tzinfo is None:
         utc_time = pytz.utc.localize(value)
     else:
         utc_time = value
-    
+
     # Convert to target timezone
     local_time = utc_time.astimezone(target_tz)
-    
+
     return local_time
