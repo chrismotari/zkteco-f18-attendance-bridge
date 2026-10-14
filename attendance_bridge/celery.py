@@ -26,10 +26,15 @@ from django.conf import settings
 app.conf.beat_schedule = {
     "poll-devices": {
         "task": "core.poll_devices",
-        "schedule": settings.POLLING_INTERVAL_MINUTES * 60.0,
+        "schedule": crontab(minute=f"*/{settings.POLLING_INTERVAL_MINUTES}"),
         "options": {"expires": settings.POLLING_INTERVAL_MINUTES * 60 - 10},
     },
-    "process-attendance": {"task": "core.process_attendance", "schedule": crontab(minute=5)},
+    # Runs 2 minutes after each poll (:02, :07, :12, ...) so it sees the freshly stored punches
+    "process-attendance": {
+        "task": "core.process_attendance",
+        "schedule": crontab(minute="2-59/5"),
+        "options": {"expires": 5 * 60 - 10},
+    },
     "sync-to-crm": {
         "task": "core.sync_to_crm",
         "schedule": 30 * 60.0,
